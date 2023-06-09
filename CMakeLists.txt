@@ -3,6 +3,21 @@ set(CMAKE_CXX_STANDARD 17)
 
 project(FluidSimulation2D)
 
+# Set a default build type if none was specified
+set(default_build_type "Release")
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  set(default_build_type "Debug")
+endif()
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to '${default_build_type}' as none was specified.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+      STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
 function(add_shader TARGET SHADER)
     find_program(GLSLC glslc)
 
@@ -40,4 +55,6 @@ add_shader(${PROJECT_NAME} shaders/shader.comp)
 target_include_directories(${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan glfw glm)
 target_compile_definitions(${PROJECT_NAME} PRIVATE)
+
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
