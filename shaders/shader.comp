@@ -10,6 +10,8 @@ layout (push_constant) uniform PushConstants
 {
     uint width;
     uint height;
+    uint sim_width;
+    uint sim_height;
     float deltaTime;
 } p;
 
@@ -17,10 +19,13 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main(){
 
-    if(gl_GlobalInvocationID.x >= p.width || gl_GlobalInvocationID.y >= p.height){
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx >= p.width || gIDy >= p.height){
         return;
     }
-    int solid = solids[(gl_GlobalInvocationID.x + (gl_GlobalInvocationID.y * p.width))];
+    int solid = solids[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
     vec4 color = vec4(0.0,0.0,0.0,1.0);
     if(solid == 1){
         color = vec4(1.0,1.0,1.0,1.0);

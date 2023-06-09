@@ -17,6 +17,9 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
+const uint32_t SIM_WIDTH = WIDTH + 2;
+const uint32_t SIM_HEIGHT = HEIGHT + 2;
+
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char*> validationLayers = {
@@ -68,6 +71,8 @@ struct SwapChainSupportDetails {
 struct PushConstants {
     unsigned int width;
     unsigned int height;
+    unsigned int sim_width;
+    unsigned int sim_height;
     float deltaTime;
 };
 
@@ -536,16 +541,16 @@ private:
 
     void createShaderStorageBuffers() {
         // create scene
-        std::vector<int> solids(WIDTH * HEIGHT);
+        std::vector<int> solids(SIM_WIDTH * SIM_HEIGHT);
 
-        unsigned int obstacleX = WIDTH / 4;
-        unsigned int obstacleY = HEIGHT / 2;
-        unsigned int obstacleR = HEIGHT / 6;
+        unsigned int obstacleX = SIM_WIDTH / 4;
+        unsigned int obstacleY = SIM_HEIGHT / 2;
+        unsigned int obstacleR = SIM_HEIGHT / 6;
 
-        for (unsigned int i = 0; i < WIDTH; i++) {
-            for (unsigned int j = 0; j < HEIGHT; j++) {
+        for (unsigned int i = 0; i < SIM_WIDTH; i++) {
+            for (unsigned int j = 0; j < SIM_HEIGHT; j++) {
                 int s = 1; // fluid
-                if (i == 0 || j  == 0 || j == HEIGHT - 1) {
+                if (i == 0 || j  == 0 || j == SIM_HEIGHT - 1) {
                     s = 0; // solid
                 }
 
@@ -556,11 +561,11 @@ private:
                     s = 0;
                 }
 
-                solids[i + WIDTH * j] = s;
+                solids[i + SIM_WIDTH * j] = s;
             }
         }
 
-        VkDeviceSize bufferSize = sizeof(int) * WIDTH * HEIGHT;
+        VkDeviceSize bufferSize = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
@@ -711,12 +716,14 @@ private:
             PushConstants pc;
             pc.width = WIDTH;
             pc.height = HEIGHT;
+            pc.sim_width = SIM_WIDTH;
+            pc.sim_height = SIM_HEIGHT;
 
             vkCmdPushConstants(commandBuffers[i], pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
             vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
             vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
-            vkCmdDispatch(commandBuffers[i], 800, 600, 1);
+            vkCmdDispatch(commandBuffers[i], WIDTH, HEIGHT, 1);
 
             recordImageBarrier(commandBuffers[i], swapChainImages[i],
                 VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -849,7 +856,7 @@ private:
             VkDescriptorBufferInfo storageBufferInfo{};
             storageBufferInfo.buffer = shaderStorageBuffers[i];
             storageBufferInfo.offset = 0;
-            storageBufferInfo.range = sizeof(int) * WIDTH * HEIGHT;
+            storageBufferInfo.range = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = descriptorSets[i];
