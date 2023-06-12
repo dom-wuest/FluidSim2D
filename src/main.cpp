@@ -729,7 +729,7 @@ private:
 
         vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
         vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSets[imageIdx], 0, nullptr);
-        vkCmdDispatch(commandBuffers[imageIdx], WIDTH, HEIGHT, 1);
+        vkCmdDispatch(commandBuffers[imageIdx], (WIDTH+31)/32, (HEIGHT+31)/32, 1);
 
         recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
             VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
