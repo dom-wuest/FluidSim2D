@@ -109,8 +109,11 @@ private:
 
     VkPipelineLayout displayPipelineLayout;
     VkPipeline displayPipeline;
-    VkPipelineLayout extrapolatePipelineLayout;
-    VkPipeline extrapolatePipeline;
+    VkPipelineLayout extrapolatePipelineLayoutU;
+    VkPipeline extrapolatePipelineU;
+
+    VkPipelineLayout extrapolatePipelineLayoutV;
+    VkPipeline extrapolatePipelineV;
 
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
@@ -129,7 +132,8 @@ private:
     VkDescriptorSetLayout displayDescriptorSetLayout;
     std::vector<VkDescriptorSet> displayDescriptorSets;
     VkDescriptorSetLayout extrapolateDescriptorSetLayout;
-    std::vector<VkDescriptorSet> extrapolateDescriptorSets;
+    std::vector<VkDescriptorSet> extrapolateDescriptorSetsU;
+    std::vector<VkDescriptorSet> extrapolateDescriptorSetsV;
     VkDescriptorPool descriptorPool;
 
     VkSampler imageSampler;
@@ -167,7 +171,8 @@ private:
         createDisplayPipeline();
 
         createExtrapolateDescriptorSetLayout();
-        createExtrapolatePipeline();
+        createExtrapolatePipelineU();
+        createExtrapolatePipelineV();
         
         createCommandPool();
 
@@ -227,8 +232,11 @@ private:
 
         cleanupSwapChain();
 
-        vkDestroyPipeline(device, extrapolatePipeline, nullptr);
-        vkDestroyPipelineLayout(device, extrapolatePipelineLayout, nullptr);
+        vkDestroyPipeline(device, extrapolatePipelineU, nullptr);
+        vkDestroyPipelineLayout(device, extrapolatePipelineLayoutU, nullptr);
+
+        vkDestroyPipeline(device, extrapolatePipelineV, nullptr);
+        vkDestroyPipelineLayout(device, extrapolatePipelineLayoutV, nullptr);
 
         vkDestroyDescriptorSetLayout(device, displayDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, extrapolateDescriptorSetLayout, nullptr);
@@ -273,7 +281,8 @@ private:
         createDisplayDescriptorSets();
         createDisplayPipeline();
         createExtrapolateDescriptorSets();
-        createExtrapolatePipeline();
+        createExtrapolatePipelineU();
+        createExtrapolatePipelineV();
         createCommandBuffers();
 
     }
@@ -553,7 +562,7 @@ private:
         vkDestroyShaderModule(device, shaderModule, nullptr);
     }
 
-    void createExtrapolatePipeline() {
+    void createExtrapolatePipelineU() {
         auto shader = readFile("../shaders/extrapolateU.comp.spv");
         VkShaderModule shaderModule = createShaderModule(shader);
 
@@ -575,19 +584,60 @@ private:
         extrapolatePipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
         extrapolatePipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
 
-        if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayout) != VK_SUCCESS) {
+        if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayoutU) != VK_SUCCESS) {
             throw std::runtime_error("failed to create extrapolatePipeline layout!");
         }
 
         VkComputePipelineCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        info.layout = extrapolatePipelineLayout;
+        info.layout = extrapolatePipelineLayoutU;
         info.basePipelineIndex = -1;
         info.basePipelineHandle = VK_NULL_HANDLE;
         info.stage = shaderStageInfo;
 
 
-        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipeline) != VK_SUCCESS) {
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipelineU) != VK_SUCCESS) {
+            throw std::runtime_error("compute shader");
+        }
+
+        vkDestroyShaderModule(device, shaderModule, nullptr);
+    }
+
+    void createExtrapolatePipelineV() {
+        auto shader = readFile("../shaders/extrapolateV.comp.spv");
+        VkShaderModule shaderModule = createShaderModule(shader);
+
+        VkPipelineShaderStageCreateInfo shaderStageInfo{};
+        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageInfo.module = shaderModule;
+        shaderStageInfo.pName = "main";
+
+        VkPushConstantRange pcr{};
+        pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pcr.offset = 0;
+        pcr.size = sizeof(PushConstants);
+
+        VkPipelineLayoutCreateInfo extrapolatePipelineLayoutInfo{};
+        extrapolatePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        extrapolatePipelineLayoutInfo.setLayoutCount = 1; // Optional
+        extrapolatePipelineLayoutInfo.pSetLayouts = &extrapolateDescriptorSetLayout; // Optional
+        extrapolatePipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
+        extrapolatePipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
+
+        if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayoutV) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create extrapolatePipeline layout!");
+        }
+
+        VkComputePipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.layout = extrapolatePipelineLayoutV;
+        info.basePipelineIndex = -1;
+        info.basePipelineHandle = VK_NULL_HANDLE;
+        info.stage = shaderStageInfo;
+
+
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipelineV) != VK_SUCCESS) {
             throw std::runtime_error("compute shader");
         }
 
@@ -834,11 +884,17 @@ private:
         pc.sim_height = SIM_HEIGHT;
         pc.deltaTime = (float)lastTime;
 
-        vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+        vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayoutU, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipeline);
-        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayout, 0, 1, &extrapolateDescriptorSets[imageIdx], 0, nullptr);
-        vkCmdDispatch(commandBuffers[imageIdx], (WIDTH + 63) /63, 1, 1);
+        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineU);
+        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutU, 0, 1, &extrapolateDescriptorSetsU[imageIdx], 0, nullptr);
+        vkCmdDispatch(commandBuffers[imageIdx], (SIM_HEIGHT + 63) /63, 1, 1);
+
+        vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayoutV, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineV);
+        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutV, 0, 1, &extrapolateDescriptorSetsV[imageIdx], 0, nullptr);
+        vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 63) / 63, 1, 1);
 
         recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -954,13 +1010,13 @@ private:
         poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 4);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 5);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 2);
+        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 3);
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -1067,39 +1123,78 @@ private:
     }
 
     void createExtrapolateDescriptorSets() {
-        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool;
-        allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
-        allocInfo.pSetLayouts = layouts.data();
+        {
+            std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
+            VkDescriptorSetAllocateInfo allocInfo{};
+            allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            allocInfo.descriptorPool = descriptorPool;
+            allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+            allocInfo.pSetLayouts = layouts.data();
 
-        extrapolateDescriptorSets.resize(swapChainImages.size());
-        if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSets.data()) != VK_SUCCESS) {
-            throw std::runtime_error("failed to allocate descriptor sets!");
+            extrapolateDescriptorSetsU.resize(swapChainImages.size());
+            if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSetsU.data()) != VK_SUCCESS) {
+                throw std::runtime_error("failed to allocate descriptor sets!");
+            }
+
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+                std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+                // velocity u buffer
+                VkDescriptorBufferInfo storageBufferInfoU{};
+                storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 1];
+                storageBufferInfoU.offset = 0;
+                storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+                descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                descriptorWrites[0].dstSet = extrapolateDescriptorSetsU[i];
+                descriptorWrites[0].dstBinding = 0;
+                descriptorWrites[0].dstArrayElement = 0;
+                descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                descriptorWrites[0].descriptorCount = 1;
+                descriptorWrites[0].pBufferInfo = &storageBufferInfoU;
+
+                vkUpdateDescriptorSets(device, 1, descriptorWrites.data(), 0, nullptr);
+
+            }
+
+            {
+                std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
+                VkDescriptorSetAllocateInfo allocInfo{};
+                allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                allocInfo.descriptorPool = descriptorPool;
+                allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+                allocInfo.pSetLayouts = layouts.data();
+
+                extrapolateDescriptorSetsV.resize(swapChainImages.size());
+                if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSetsV.data()) != VK_SUCCESS) {
+                    throw std::runtime_error("failed to allocate descriptor sets!");
+                }
+
+                for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+                    std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+                    // velocity u buffer
+                    VkDescriptorBufferInfo storageBufferInfoU{};
+                    storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 2];
+                    storageBufferInfoU.offset = 0;
+                    storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+                    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    descriptorWrites[0].dstSet = extrapolateDescriptorSetsV[i];
+                    descriptorWrites[0].dstBinding = 0;
+                    descriptorWrites[0].dstArrayElement = 0;
+                    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    descriptorWrites[0].descriptorCount = 1;
+                    descriptorWrites[0].pBufferInfo = &storageBufferInfoU;
+
+                    vkUpdateDescriptorSets(device, 1, descriptorWrites.data(), 0, nullptr);
+
+                }
+            }
         }
-
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
-
-            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
-
-            // velocity u buffer
-            VkDescriptorBufferInfo storageBufferInfoU{};
-            storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 1];
-            storageBufferInfoU.offset = 0;
-            storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
-
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = extrapolateDescriptorSets[i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].dstArrayElement = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &storageBufferInfoU;
-
-            vkUpdateDescriptorSets(device, 1, descriptorWrites.data(), 0, nullptr);
-
-        }
+        
     }
 
     void drawFrame() {

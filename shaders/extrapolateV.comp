@@ -1,7 +1,7 @@
 #version 450
 
-layout (binding = 0) buffer UInOut {
-    float u[ ];
+layout (binding = 0) buffer VInOut {
+    float v[ ];
 };
 
 layout (push_constant) uniform PushConstants
@@ -19,9 +19,9 @@ void main(){
 
     uint gIDx = gl_GlobalInvocationID.x;
 
-    if(gIDx >= p.sim_height){
+    if(gIDx >= p.sim_width){
         return;
     }
-    u[gIDx * p.sim_width] = u[gIDx * p.sim_width + 1];
-    u[gIDx * p.sim_width + p.sim_width - 1] = u[gIDx * p.sim_width + p.sim_width - 2];
+    v[gIDx] = v[p.sim_width + gIDx];
+    v[gIDx + p.sim_width * (p.sim_height - 1)] = v[gIDx + p.sim_width * (p.sim_height - 2)];
 }
