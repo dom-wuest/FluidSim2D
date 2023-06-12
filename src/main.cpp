@@ -212,7 +212,7 @@ private:
 
     void cleanup() {
 
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
+        for (size_t i = 0; i < swapChainImages.size() * 3; i++) {
             vkDestroyBuffer(device, shaderStorageBuffers[i], nullptr);
             vkFreeMemory(device, shaderStorageBuffersMemory[i], nullptr);
         }
@@ -541,7 +541,12 @@ private:
 
     void createShaderStorageBuffers() {
         // create scene
+        // solid cells
         std::vector<int> solids(SIM_WIDTH * SIM_HEIGHT);
+        // horizontal velocity
+        std::vector<float> u(SIM_WIDTH * SIM_HEIGHT, 0.0f);
+        // vertical velocity
+        std::vector<float> v(SIM_WIDTH * SIM_HEIGHT, 0.0f);
 
         unsigned int obstacleX = SIM_WIDTH / 4;
         unsigned int obstacleY = SIM_HEIGHT / 2;
@@ -558,37 +563,91 @@ private:
                 int dy = j - obstacleY;
 
                 if (dx * dx + dy * dy < obstacleR * obstacleR) {
-                    s = 0;
+                    s = 0; // solid
                 }
 
                 solids[i + SIM_WIDTH * j] = s;
+
+                if (i == 1) {
+                    u[i + SIM_WIDTH * j] = 1.0f;
+                }
             }
         }
 
-        VkDeviceSize bufferSize = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
+        shaderStorageBuffers.resize(swapChainImages.size() * 3);
+        shaderStorageBuffersMemory.resize(swapChainImages.size() * 3);
 
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
+        // copy solids to GPU
+        {
+            VkDeviceSize bufferSize = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
 
-        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
 
-        void* data;
-        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, solids.data(), (size_t)bufferSize);
-        vkUnmapMemory(device, stagingBufferMemory);
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
-        shaderStorageBuffers.resize(swapChainImages.size());
-        shaderStorageBuffersMemory.resize(swapChainImages.size());
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, solids.data(), (size_t)bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
 
-        // Copy initial particle data to all storage buffers
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
-            createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i], shaderStorageBuffersMemory[i]);
-            copyBuffer(stagingBuffer, shaderStorageBuffers[i], bufferSize);
+            // Copy initial data to all storage buffers
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
+                createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i * 3], shaderStorageBuffersMemory[i * 3]);
+                copyBuffer(stagingBuffer, shaderStorageBuffers[i * 3], bufferSize);
+            }
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
         }
 
-        vkDestroyBuffer(device, stagingBuffer, nullptr);
-        vkFreeMemory(device, stagingBufferMemory, nullptr);
+        // copy velocity u to GPU
+        {
+            VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
 
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, u.data(), (size_t)bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            // Copy initial data to all storage buffers
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
+                createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i * 3 + 1], shaderStorageBuffersMemory[i * 3 + 1]);
+                copyBuffer(stagingBuffer, shaderStorageBuffers[i * 3 + 1], bufferSize);
+            }
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
+
+        // copy velocity v to GPU
+        {
+            VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+
+            createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+            memcpy(data, v.data(), (size_t)bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            // Copy initial data to all storage buffers
+            for (size_t i = 0; i < swapChainImages.size(); i++) {
+                createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i * 3 + 2], shaderStorageBuffersMemory[i * 3 + 2]);
+                copyBuffer(stagingBuffer, shaderStorageBuffers[i * 3 + 2], bufferSize);
+            }
+
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
     }
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
@@ -765,22 +824,38 @@ private:
 
     void createDescriptorSetLayout() {
 
-        std::array<VkDescriptorSetLayoutBinding, 2> layoutBindings{};
+        std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
+        // swapchain image for output
         layoutBindings[0].binding = 0;
         layoutBindings[0].descriptorCount = 1;
         layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         layoutBindings[0].pImmutableSamplers = &imageSampler;
         layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+        // solids buffer
         layoutBindings[1].binding = 1;
         layoutBindings[1].descriptorCount = 1;
         layoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         layoutBindings[1].pImmutableSamplers = nullptr;
         layoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+        // velocity u buffer
+        layoutBindings[2].binding = 2;
+        layoutBindings[2].descriptorCount = 1;
+        layoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBindings[2].pImmutableSamplers = nullptr;
+        layoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        // velocity v buffer
+        layoutBindings[3].binding = 3;
+        layoutBindings[3].descriptorCount = 1;
+        layoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBindings[3].pImmutableSamplers = nullptr;
+        layoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 2;
+        layoutInfo.bindingCount = 4;
         layoutInfo.pBindings = layoutBindings.data();
 
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
@@ -796,7 +871,7 @@ private:
         poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 3);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -849,7 +924,9 @@ private:
             imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
             imageInfo.sampler = imageSampler;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
+
+            // swapchain image
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[0].dstSet = descriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
@@ -858,10 +935,11 @@ private:
             descriptorWrites[0].descriptorCount = 1;
             descriptorWrites[0].pImageInfo = &imageInfo;
 
-            VkDescriptorBufferInfo storageBufferInfo{};
-            storageBufferInfo.buffer = shaderStorageBuffers[i];
-            storageBufferInfo.offset = 0;
-            storageBufferInfo.range = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
+            // solids buffer
+            VkDescriptorBufferInfo storageBufferInfoSolids{};
+            storageBufferInfoSolids.buffer = shaderStorageBuffers[3 * i];
+            storageBufferInfoSolids.offset = 0;
+            storageBufferInfoSolids.range = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrites[1].dstSet = descriptorSets[i];
@@ -869,10 +947,38 @@ private:
             descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
             descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pBufferInfo = &storageBufferInfo;
+            descriptorWrites[1].pBufferInfo = &storageBufferInfoSolids;
+
+            // velocity u buffer
+            VkDescriptorBufferInfo storageBufferInfoU{};
+            storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 1];
+            storageBufferInfoU.offset = 0;
+            storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = descriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].dstArrayElement = 0;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pBufferInfo = &storageBufferInfoU;
+
+            // velocity v buffer
+            VkDescriptorBufferInfo storageBufferInfoV{};
+            storageBufferInfoV.buffer = shaderStorageBuffers[3 * i + 2];
+            storageBufferInfoV.offset = 0;
+            storageBufferInfoV.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = descriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].dstArrayElement = 0;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pBufferInfo = &storageBufferInfoV;
 
 
-            vkUpdateDescriptorSets(device, 2, descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(device, 4, descriptorWrites.data(), 0, nullptr);
 
         }
     }

@@ -6,6 +6,14 @@ layout (binding = 1) readonly buffer SolidsIn {
     int solids[ ];
 };
 
+layout (binding = 2) readonly buffer UIn {
+    float u[ ];
+};
+
+layout (binding = 3) readonly buffer VIn {
+    float v[ ];
+};
+
 layout (push_constant) uniform PushConstants
 {
     uint width;
@@ -26,9 +34,11 @@ void main(){
         return;
     }
     int solid = solids[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
+    float u_vel = u[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
+    float v_vel = v[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
     vec4 color = vec4(0.0,0.0,0.0,1.0);
     if(solid == 1){
-        color = vec4(1.0,1.0,1.0,1.0);
+        color = vec4(u_vel,v_vel,0.0,1.0);
     } else {
         color = vec4(0.0,0.0,(sin(p.deltaTime)+1.0)/2.0,1.0);
     }
