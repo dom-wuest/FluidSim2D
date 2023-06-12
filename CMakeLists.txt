@@ -50,6 +50,7 @@ set( SOURCE_FILE
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
 
+add_shader(${PROJECT_NAME} shaders/advectVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/displayVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/extrapolateU.comp)
 add_shader(${PROJECT_NAME} shaders/extrapolateV.comp)

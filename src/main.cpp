@@ -109,11 +109,15 @@ private:
 
     VkPipelineLayout displayPipelineLayout;
     VkPipeline displayPipeline;
+
     VkPipelineLayout extrapolatePipelineLayoutU;
     VkPipeline extrapolatePipelineU;
 
     VkPipelineLayout extrapolatePipelineLayoutV;
     VkPipeline extrapolatePipelineV;
+
+    VkPipelineLayout advectVelPipelineLayout;
+    VkPipeline advectVelPipeline;
 
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
@@ -131,9 +135,14 @@ private:
 
     VkDescriptorSetLayout displayDescriptorSetLayout;
     std::vector<VkDescriptorSet> displayDescriptorSets;
+
     VkDescriptorSetLayout extrapolateDescriptorSetLayout;
     std::vector<VkDescriptorSet> extrapolateDescriptorSetsU;
     std::vector<VkDescriptorSet> extrapolateDescriptorSetsV;
+
+    VkDescriptorSetLayout advectVelDescriptorSetLayout;
+    std::vector<VkDescriptorSet> advectVelDescriptorSets;
+
     VkDescriptorPool descriptorPool;
 
     VkSampler imageSampler;
@@ -173,6 +182,9 @@ private:
         createExtrapolateDescriptorSetLayout();
         createExtrapolatePipelineU();
         createExtrapolatePipelineV();
+
+        createAdvectVelDescriptorSetLayout();
+        createAdvectVelPipeline();
         
         createCommandPool();
 
@@ -180,6 +192,7 @@ private:
         createDescriptorPool();
         createDisplayDescriptorSets();
         createExtrapolateDescriptorSets();
+        createAdvectVelDescriptorSets();
         createCommandBuffers();
 
         createSyncObjects();
@@ -238,8 +251,12 @@ private:
         vkDestroyPipeline(device, extrapolatePipelineV, nullptr);
         vkDestroyPipelineLayout(device, extrapolatePipelineLayoutV, nullptr);
 
+        vkDestroyPipeline(device, advectVelPipeline, nullptr);
+        vkDestroyPipelineLayout(device, advectVelPipelineLayout, nullptr);
+
         vkDestroyDescriptorSetLayout(device, displayDescriptorSetLayout, nullptr);
         vkDestroyDescriptorSetLayout(device, extrapolateDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, advectVelDescriptorSetLayout, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -283,6 +300,7 @@ private:
         createExtrapolateDescriptorSets();
         createExtrapolatePipelineU();
         createExtrapolatePipelineV();
+        createAdvectVelPipeline();
         createCommandBuffers();
 
     }
@@ -644,6 +662,47 @@ private:
         vkDestroyShaderModule(device, shaderModule, nullptr);
     }
 
+    void createAdvectVelPipeline() {
+        auto shader = readFile("../shaders/advectVelocity.comp.spv");
+        VkShaderModule shaderModule = createShaderModule(shader);
+
+        VkPipelineShaderStageCreateInfo shaderStageInfo{};
+        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageInfo.module = shaderModule;
+        shaderStageInfo.pName = "main";
+
+        VkPushConstantRange pcr{};
+        pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pcr.offset = 0;
+        pcr.size = sizeof(PushConstants);
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1; // Optional
+        pipelineLayoutInfo.pSetLayouts = &advectVelDescriptorSetLayout; // Optional
+        pipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
+        pipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &advectVelPipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create advectPipeline layout!");
+        }
+
+        VkComputePipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.layout = advectVelPipelineLayout;
+        info.basePipelineIndex = -1;
+        info.basePipelineHandle = VK_NULL_HANDLE;
+        info.stage = shaderStageInfo;
+
+
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &advectVelPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("compute shader");
+        }
+
+        vkDestroyShaderModule(device, shaderModule, nullptr);
+    }
+
     void createShaderStorageBuffers() {
         // create scene
         // solid cells
@@ -882,19 +941,33 @@ private:
         pc.height = HEIGHT;
         pc.sim_width = SIM_WIDTH;
         pc.sim_height = SIM_HEIGHT;
-        pc.deltaTime = (float)lastTime;
+        pc.deltaTime = (float)lastFrameTime;
+
+        vkCmdPushConstants(commandBuffers[imageIdx], advectVelPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectVelPipeline);
+        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectVelPipelineLayout, 0, 1, &advectVelDescriptorSets[imageIdx], 0, nullptr);
+        vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+
+        VkMemoryBarrier barrier;
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        barrier.pNext = NULL;
+        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffers[imageIdx], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier, 0, nullptr, 0, nullptr);
 
         vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayoutU, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
         vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineU);
         vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutU, 0, 1, &extrapolateDescriptorSetsU[imageIdx], 0, nullptr);
-        vkCmdDispatch(commandBuffers[imageIdx], (SIM_HEIGHT + 63) /63, 1, 1);
+        vkCmdDispatch(commandBuffers[imageIdx], (SIM_HEIGHT + 63) /64, 1, 1);
 
         vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayoutV, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
         vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineV);
         vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutV, 0, 1, &extrapolateDescriptorSetsV[imageIdx], 0, nullptr);
-        vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 63) / 63, 1, 1);
+        vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 63) / 64, 1, 1);
 
         recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
             VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -1003,6 +1076,29 @@ private:
 
     }
 
+    void createAdvectVelDescriptorSetLayout() {
+
+        std::array<VkDescriptorSetLayoutBinding, 5> layoutBindings{};
+
+        for (int i = 0; i < 5; i++) {
+            layoutBindings[i].binding = i;
+            layoutBindings[i].descriptorCount = 1;
+            layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            layoutBindings[i].pImmutableSamplers = nullptr;
+            layoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        }
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 5;
+        layoutInfo.pBindings = layoutBindings.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &advectVelDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor set layout!");
+        }
+
+    }
+
     void createDescriptorPool() {
         
         std::array<VkDescriptorPoolSize, 2> poolSizes{};
@@ -1010,13 +1106,13 @@ private:
         poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 5);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 9);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 3);
+        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 4);
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -1195,6 +1291,106 @@ private:
             }
         }
         
+    }
+
+    void createAdvectVelDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), advectVelDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+        allocInfo.pSetLayouts = layouts.data();
+
+        advectVelDescriptorSets.resize(swapChainImages.size());
+        if (vkAllocateDescriptorSets(device, &allocInfo, advectVelDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+            std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
+
+            // solids buffer
+            VkDescriptorBufferInfo storageBufferInfoSolids{};
+            storageBufferInfoSolids.buffer = shaderStorageBuffers[3 * i];
+            storageBufferInfoSolids.offset = 0;
+            storageBufferInfoSolids.range = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = advectVelDescriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &storageBufferInfoSolids;
+
+            // i_old is index of previous frame
+            size_t i_old = (i - 1) % swapChainImages.size();
+
+            // velocity u buffer of previous frame
+            VkDescriptorBufferInfo storageBufferInfoOldU{};
+            storageBufferInfoOldU.buffer = shaderStorageBuffers[3 * i_old + 1];
+            storageBufferInfoOldU.offset = 0;
+            storageBufferInfoOldU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            // velocity v buffer of previous frame
+            VkDescriptorBufferInfo storageBufferInfoOldV{};
+            storageBufferInfoOldV.buffer = shaderStorageBuffers[3 * i_old + 2];
+            storageBufferInfoOldV.offset = 0;
+            storageBufferInfoOldV.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            // velocity u buffer of this frame
+            VkDescriptorBufferInfo storageBufferInfoU{};
+            storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 1];
+            storageBufferInfoU.offset = 0;
+            storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            // velocity v buffer of this frame
+            VkDescriptorBufferInfo storageBufferInfoV{};
+            storageBufferInfoV.buffer = shaderStorageBuffers[3 * i + 2];
+            storageBufferInfoV.offset = 0;
+            storageBufferInfoV.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            // u in (old buffer)
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = advectVelDescriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].dstArrayElement = 0;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pBufferInfo = &storageBufferInfoOldU;
+
+            // v in (old buffer)
+            descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[2].dstSet = advectVelDescriptorSets[i];
+            descriptorWrites[2].dstBinding = 2;
+            descriptorWrites[2].dstArrayElement = 0;
+            descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[2].descriptorCount = 1;
+            descriptorWrites[2].pBufferInfo = &storageBufferInfoOldV;
+
+            // u out (new buffer)
+            descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[3].dstSet = advectVelDescriptorSets[i];
+            descriptorWrites[3].dstBinding = 3;
+            descriptorWrites[3].dstArrayElement = 0;
+            descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[3].descriptorCount = 1;
+            descriptorWrites[3].pBufferInfo = &storageBufferInfoU;
+
+            // u out (new buffer)
+            descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[4].dstSet = advectVelDescriptorSets[i];
+            descriptorWrites[4].dstBinding = 4;
+            descriptorWrites[4].dstArrayElement = 0;
+            descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[4].descriptorCount = 1;
+            descriptorWrites[4].pBufferInfo = &storageBufferInfoV;
+
+
+            vkUpdateDescriptorSets(device, 5, descriptorWrites.data(), 0, nullptr);
+
+        }
     }
 
     void drawFrame() {

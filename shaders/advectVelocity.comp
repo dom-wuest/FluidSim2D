@@ -1,0 +1,49 @@
+#version 450
+
+layout (binding = 0) buffer SolidsIn {
+    float s[ ];
+};
+
+layout (binding = 1) buffer UIn {
+    float u_in[ ];
+};
+
+layout (binding = 2) buffer VIn {
+    float v_in[ ];
+};
+
+layout (binding = 3) buffer UOut {
+    float u_out[ ];
+};
+
+layout (binding = 4) buffer VOut {
+    float v_out[ ];
+};
+
+layout (push_constant) uniform PushConstants
+{
+    uint width;
+    uint height;
+    uint sim_width;
+    uint sim_height;
+    float deltaTime;
+} p;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+void main(){
+
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx >= p.sim_width || gIDy >= p.sim_height){
+        return;
+    }
+    if(gIDx == 0 || gIDy == 0){
+        u_out[gIDx + p.sim_width * gIDy] = 1.0;
+        v_out[gIDx + p.sim_width * gIDy] = 1.0;
+    } else {
+        u_out[gIDx + p.sim_width * gIDy] = min(u_in[gIDx + p.sim_width * gIDy] + u_in[gIDx + p.sim_width * gIDy - 1] * p.deltaTime / 10.0, 1.0);
+        v_out[gIDx + p.sim_width * gIDy] = min(v_in[gIDx + p.sim_width * gIDy] + v_in[gIDx + p.sim_width * (gIDy - 1)] * p.deltaTime / 10.0, 1.0);
+    }
+}
