@@ -107,8 +107,10 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImageView> swapChainImageViews;
 
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
+    VkPipelineLayout displayPipelineLayout;
+    VkPipeline displayPipeline;
+    VkPipelineLayout extrapolatePipelineLayout;
+    VkPipeline extrapolatePipeline;
 
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
@@ -124,8 +126,10 @@ private:
     float lastFrameTime = 0.0f;
     double lastTime = 0.0;
 
-    VkDescriptorSetLayout descriptorSetLayout;
-    std::vector<VkDescriptorSet> descriptorSets;
+    VkDescriptorSetLayout displayDescriptorSetLayout;
+    std::vector<VkDescriptorSet> displayDescriptorSets;
+    VkDescriptorSetLayout extrapolateDescriptorSetLayout;
+    std::vector<VkDescriptorSet> extrapolateDescriptorSets;
     VkDescriptorPool descriptorPool;
 
     VkSampler imageSampler;
@@ -159,14 +163,18 @@ private:
         createSwapChain();
         createImageViews();
 
-        createDescriptorSetLayout();
-        createComputePipeline();
+        createDisplayDescriptorSetLayout();
+        createDisplayPipeline();
+
+        createExtrapolateDescriptorSetLayout();
+        createExtrapolatePipeline();
         
         createCommandPool();
 
         createShaderStorageBuffers();
         createDescriptorPool();
-        createDescriptorSets();
+        createDisplayDescriptorSets();
+        createExtrapolateDescriptorSets();
         createCommandBuffers();
 
         createSyncObjects();
@@ -200,8 +208,8 @@ private:
 
         vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
-        vkDestroyPipeline(device, pipeline, nullptr);
-        vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+        vkDestroyPipeline(device, displayPipeline, nullptr);
+        vkDestroyPipelineLayout(device, displayPipelineLayout, nullptr);
 
         for (auto imageView : swapChainImageViews) {
             vkDestroyImageView(device, imageView, nullptr);
@@ -219,7 +227,11 @@ private:
 
         cleanupSwapChain();
 
-        vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        vkDestroyPipeline(device, extrapolatePipeline, nullptr);
+        vkDestroyPipelineLayout(device, extrapolatePipelineLayout, nullptr);
+
+        vkDestroyDescriptorSetLayout(device, displayDescriptorSetLayout, nullptr);
+        vkDestroyDescriptorSetLayout(device, extrapolateDescriptorSetLayout, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -258,8 +270,10 @@ private:
         createSwapChain();
         createImageViews();
         createDescriptorPool();
-        createDescriptorSets();
-        createComputePipeline();
+        createDisplayDescriptorSets();
+        createDisplayPipeline();
+        createExtrapolateDescriptorSets();
+        createExtrapolatePipeline();
         createCommandBuffers();
 
     }
@@ -498,8 +512,8 @@ private:
         }
     }
 
-    void createComputePipeline() {
-        auto shader = readFile("../shaders/shader.comp.spv");
+    void createDisplayPipeline() {
+        auto shader = readFile("../shaders/displayVelocity.comp.spv");
         VkShaderModule shaderModule = createShaderModule(shader);
 
         VkPipelineShaderStageCreateInfo shaderStageInfo{};
@@ -513,26 +527,67 @@ private:
         pcr.offset = 0;
         pcr.size = sizeof(PushConstants);
 
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1; // Optional
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // Optional
-        pipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-        pipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
+        VkPipelineLayoutCreateInfo displayPipelineLayoutInfo{};
+        displayPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        displayPipelineLayoutInfo.setLayoutCount = 1; // Optional
+        displayPipelineLayoutInfo.pSetLayouts = &displayDescriptorSetLayout; // Optional
+        displayPipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
+        displayPipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
 
-        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create pipeline layout!");
+        if (vkCreatePipelineLayout(device, &displayPipelineLayoutInfo, nullptr, &displayPipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create displayPipeline layout!");
         }
 
         VkComputePipelineCreateInfo info{};
         info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        info.layout = pipelineLayout;
+        info.layout = displayPipelineLayout;
         info.basePipelineIndex = -1;
         info.basePipelineHandle = VK_NULL_HANDLE;
         info.stage = shaderStageInfo;
 
 
-        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &pipeline) != VK_SUCCESS) {
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &displayPipeline) != VK_SUCCESS) {
+            throw std::runtime_error("compute shader");
+        }
+
+        vkDestroyShaderModule(device, shaderModule, nullptr);
+    }
+
+    void createExtrapolatePipeline() {
+        auto shader = readFile("../shaders/extrapolateU.comp.spv");
+        VkShaderModule shaderModule = createShaderModule(shader);
+
+        VkPipelineShaderStageCreateInfo shaderStageInfo{};
+        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageInfo.module = shaderModule;
+        shaderStageInfo.pName = "main";
+
+        VkPushConstantRange pcr{};
+        pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pcr.offset = 0;
+        pcr.size = sizeof(PushConstants);
+
+        VkPipelineLayoutCreateInfo extrapolatePipelineLayoutInfo{};
+        extrapolatePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        extrapolatePipelineLayoutInfo.setLayoutCount = 1; // Optional
+        extrapolatePipelineLayoutInfo.pSetLayouts = &extrapolateDescriptorSetLayout; // Optional
+        extrapolatePipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
+        extrapolatePipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
+
+        if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create extrapolatePipeline layout!");
+        }
+
+        VkComputePipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.layout = extrapolatePipelineLayout;
+        info.basePipelineIndex = -1;
+        info.basePipelineHandle = VK_NULL_HANDLE;
+        info.stage = shaderStageInfo;
+
+
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipeline) != VK_SUCCESS) {
             throw std::runtime_error("compute shader");
         }
 
@@ -715,6 +770,7 @@ private:
 
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = queueFamilyIndices.computeFamily.value();
 
         if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
@@ -771,12 +827,6 @@ private:
             throw std::runtime_error("failed to begin recording command buffer!");
         }
 
-
-        recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
-            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
-            VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-
         PushConstants pc;
         pc.width = WIDTH;
         pc.height = HEIGHT;
@@ -784,10 +834,21 @@ private:
         pc.sim_height = SIM_HEIGHT;
         pc.deltaTime = (float)lastTime;
 
-        vkCmdPushConstants(commandBuffers[imageIdx], pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+        vkCmdPushConstants(commandBuffers[imageIdx], extrapolatePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSets[imageIdx], 0, nullptr);
+        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipeline);
+        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayout, 0, 1, &extrapolateDescriptorSets[imageIdx], 0, nullptr);
+        vkCmdDispatch(commandBuffers[imageIdx], (WIDTH + 63) /63, 1, 1);
+
+        recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
+            VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
+            VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+        vkCmdPushConstants(commandBuffers[imageIdx], displayPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+        vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayPipeline);
+        vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayPipelineLayout, 0, 1, &displayDescriptorSets[imageIdx], 0, nullptr);
         vkCmdDispatch(commandBuffers[imageIdx], (WIDTH+31)/32, (HEIGHT+31)/32, 1);
 
         recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
@@ -822,7 +883,7 @@ private:
         }
     }
 
-    void createDescriptorSetLayout() {
+    void createDisplayDescriptorSetLayout() {
 
         std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
         // swapchain image for output
@@ -858,7 +919,29 @@ private:
         layoutInfo.bindingCount = 4;
         layoutInfo.pBindings = layoutBindings.data();
 
-        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &displayDescriptorSetLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create descriptor set layout!");
+        }
+
+    }
+
+    void createExtrapolateDescriptorSetLayout() {
+
+        std::array<VkDescriptorSetLayoutBinding, 1> layoutBindings{};
+        
+        // velocity u buffer
+        layoutBindings[0].binding = 0;
+        layoutBindings[0].descriptorCount = 1;
+        layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        layoutBindings[0].pImmutableSamplers = nullptr;
+        layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = layoutBindings.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &extrapolateDescriptorSetLayout) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor set layout!");
         }
 
@@ -871,13 +954,13 @@ private:
         poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 3);
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 4);
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = 2;
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size());
+        poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 2);
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
             throw std::runtime_error("failed to create descriptor pool!");
@@ -885,16 +968,16 @@ private:
 
     }
 
-    void createDescriptorSets() {
-        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
+    void createDisplayDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), displayDescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = descriptorPool;
         allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
         allocInfo.pSetLayouts = layouts.data();
 
-        descriptorSets.resize(swapChainImages.size());
-        if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+        displayDescriptorSets.resize(swapChainImages.size());
+        if (vkAllocateDescriptorSets(device, &allocInfo, displayDescriptorSets.data()) != VK_SUCCESS) {
             throw std::runtime_error("failed to allocate descriptor sets!");
         }
 
@@ -928,7 +1011,7 @@ private:
 
             // swapchain image
             descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = descriptorSets[i];
+            descriptorWrites[0].dstSet = displayDescriptorSets[i];
             descriptorWrites[0].dstBinding = 0;
             descriptorWrites[0].dstArrayElement = 0;
             descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -942,7 +1025,7 @@ private:
             storageBufferInfoSolids.range = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
 
             descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = descriptorSets[i];
+            descriptorWrites[1].dstSet = displayDescriptorSets[i];
             descriptorWrites[1].dstBinding = 1;
             descriptorWrites[1].dstArrayElement = 0;
             descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -956,7 +1039,7 @@ private:
             storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
 
             descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[2].dstSet = descriptorSets[i];
+            descriptorWrites[2].dstSet = displayDescriptorSets[i];
             descriptorWrites[2].dstBinding = 2;
             descriptorWrites[2].dstArrayElement = 0;
             descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -970,7 +1053,7 @@ private:
             storageBufferInfoV.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
 
             descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[3].dstSet = descriptorSets[i];
+            descriptorWrites[3].dstSet = displayDescriptorSets[i];
             descriptorWrites[3].dstBinding = 3;
             descriptorWrites[3].dstArrayElement = 0;
             descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -979,6 +1062,42 @@ private:
 
 
             vkUpdateDescriptorSets(device, 4, descriptorWrites.data(), 0, nullptr);
+
+        }
+    }
+
+    void createExtrapolateDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+        allocInfo.pSetLayouts = layouts.data();
+
+        extrapolateDescriptorSets.resize(swapChainImages.size());
+        if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+            // velocity u buffer
+            VkDescriptorBufferInfo storageBufferInfoU{};
+            storageBufferInfoU.buffer = shaderStorageBuffers[3 * i + 1];
+            storageBufferInfoU.offset = 0;
+            storageBufferInfoU.range = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = extrapolateDescriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].dstArrayElement = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &storageBufferInfoU;
+
+            vkUpdateDescriptorSets(device, 1, descriptorWrites.data(), 0, nullptr);
 
         }
     }

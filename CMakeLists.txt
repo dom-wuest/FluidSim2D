@@ -50,7 +50,8 @@ set( SOURCE_FILE
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
 
-add_shader(${PROJECT_NAME} shaders/shader.comp)
+add_shader(${PROJECT_NAME} shaders/displayVelocity.comp)
+add_shader(${PROJECT_NAME} shaders/extrapolateU.comp)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan glfw glm)
