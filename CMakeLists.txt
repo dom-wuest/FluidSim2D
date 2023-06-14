@@ -51,9 +51,12 @@ set( SOURCE_FILE
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
 
 add_shader(${PROJECT_NAME} shaders/advectVelocity.comp)
+add_shader(${PROJECT_NAME} shaders/calcDivergence.comp)
 add_shader(${PROJECT_NAME} shaders/displayVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/extrapolateU.comp)
 add_shader(${PROJECT_NAME} shaders/extrapolateV.comp)
+add_shader(${PROJECT_NAME} shaders/projectPressure.comp)
+add_shader(${PROJECT_NAME} shaders/subtractGradient.comp)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan glfw glm)
