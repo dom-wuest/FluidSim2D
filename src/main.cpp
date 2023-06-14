@@ -17,8 +17,8 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const uint32_t SIM_WIDTH = WIDTH + 2;
-const uint32_t SIM_HEIGHT = HEIGHT + 2;
+const uint32_t SIM_WIDTH = 40;
+const uint32_t SIM_HEIGHT = 40;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
