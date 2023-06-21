@@ -46,6 +46,8 @@ find_package(Vulkan REQUIRED)
 
 set( SOURCE_FILE 
     src/main.cpp
+    src/utils.cpp
+    include/utils.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
@@ -58,6 +60,7 @@ add_shader(${PROJECT_NAME} shaders/extrapolateV.comp)
 add_shader(${PROJECT_NAME} shaders/projectPressure.comp)
 add_shader(${PROJECT_NAME} shaders/subtractGradient.comp)
 
+target_include_directories(${PROJECT_NAME} PUBLIC ./include)
 target_include_directories(${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan glfw glm)
 target_compile_definitions(${PROJECT_NAME} PRIVATE)
