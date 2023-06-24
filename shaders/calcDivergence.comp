@@ -1,7 +1,7 @@
 #version 450
 
 layout (binding = 0) buffer SolidsIn {
-    float s[ ];
+    int s[ ];
 };
 
 layout (binding = 1) buffer UIn {
@@ -27,6 +27,9 @@ layout (push_constant) uniform PushConstants
 
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
+#define S_COORD(i,j) (i) + (j) * p.sim_width
+#define UV_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+
 void main(){
 
     uint gIDx = gl_GlobalInvocationID.x;
@@ -35,5 +38,26 @@ void main(){
     if(gIDx >= p.sim_width || gIDy >= p.sim_height){
         return;
     }
+
+    if(s[S_COORD(gIDx, gIDy)] == 0){
+        return;
+    }
+
+    int s_l = gIDx > 0 ? s[S_COORD(gIDx - 1, gIDy)] : 0;
+    int s_r = gIDx < (p.sim_width - 1) ? s[S_COORD(gIDx + 1, gIDy)] : 0;
+    int s_t = gIDy > 0 ? s[S_COORD(gIDx, gIDy - 1)] : 0;
+    int s_b = gIDy < (p.sim_height - 1) ? s[S_COORD(gIDx, gIDy + 1)] : 0;
+    int s_sum = s_l + s_r + s_t + s_b;
+
+    if(s_sum == 0) {
+        return;
+    }
     
+    float u_l = u[UV_COORD(gIDx, gIDy)];
+    float u_r = u[UV_COORD(gIDx + 1, gIDy)];
+    float v_t = v[UV_COORD(gIDx, gIDy)];
+    float v_b = v[UV_COORD(gIDx, gIDy + 1)];
+
+    float div = u_r - u_l + v_b - v_t;
+    divergence[S_COORD(gIDx, gIDy)] = div * 0.5;
 }

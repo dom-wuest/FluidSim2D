@@ -14,6 +14,10 @@ layout (binding = 3) readonly buffer VIn {
     float v[ ];
 };
 
+layout (binding = 4) readonly buffer PIn {
+    float pressure[];
+};
+
 layout (push_constant) uniform PushConstants
 {
     uint width;
@@ -25,11 +29,23 @@ layout (push_constant) uniform PushConstants
 
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
-float nearest_solids(float x, float y){
+float nearest_p(float x, float y){
     // x,y in [0.0,1.0)
     float x_l = floor(x * float(p.sim_width));
     float y_l = floor(y * float(p.sim_height));
-    return float(solids[int(x_l) + p.sim_width * int(y_l)]);
+    return float(pressure[int(x_l) + p.sim_width * int(y_l)]);
+}
+float nearest_u(float x, float y){
+    // x,y in [0.0,1.0)
+    float x_l = floor(x * float(p.sim_width));
+    float y_l = floor(y * float(p.sim_height));
+    return float(u[int(x_l) + (p.sim_width + 1) * int(y_l)]);
+}
+float nearest_v(float x, float y){
+    // x,y in [0.0,1.0)
+    float x_l = floor(x * float(p.sim_width + 1));
+    float y_l = floor(y * float(p.sim_height + 1));
+    return float(v[int(x_l) + (p.sim_width + 1) * int(y_l)]);
 }
 
 float bilerp_solids(float x, float y){
@@ -98,6 +114,8 @@ float bilerp_v(float x, float y){
     return (A * (1.0-dx) + B * dx) * (1.0-dy) + (C * (1.0-dx) + D * dx) * dy;
 }
 
+#define S_COORD(i,j) (i) + (j) * p.sim_width
+
 void main(){
 
     uint gIDx = gl_GlobalInvocationID.x;
@@ -106,22 +124,17 @@ void main(){
     if(gIDx >= p.width || gIDy >= p.height){
         return;
     }
-    //int solid = solids[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
-    //float u_vel = u[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
-    //float v_vel = v[(1 + gIDx + ((gIDy + 1) * p.sim_width))];
-    //vec4 color = vec4(0.0,0.0,0.0,1.0);
-    //if(solid == 1){
-    //    color = vec4(u_vel,v_vel,0.0,1.0);
-    //} else {
-    //    color = vec4(0.0,0.0,1.0,1.0);
-    //}
 
     float x = float(gIDx) / float(p.width);
     float y = float(gIDy) / float(p.height);
-    float solid = bilerp_solids(x,y);
+    //float solid = nearest_solids(x,y);
     //float u_x = bilerp_u(x,y);
     //float v_x = bilerp_v(x,y);
     //vec4 color = vec4(u_x,v_x,0.0,1.0);
-    vec4 color = vec4(0.0,0.0,solid,1.0);
+
+    float press = nearest_p(x, y);
+    float vel_u = nearest_u(x, y) / 10.0;
+    float vel_v = nearest_v(x, y) / 10.0;
+    vec4 color = vec4(0.0,0.0,press,1.0);
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
 }

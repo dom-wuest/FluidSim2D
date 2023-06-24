@@ -80,6 +80,8 @@ struct PushConstants {
 	float deltaTime;
 };
 
+
+
 class FluidSimApplication {
 public:
 	void run() {
@@ -111,20 +113,11 @@ private:
 	VkExtent2D swapChainExtent;
 	std::vector<VkImageView> swapChainImageViews;
 
-	VkPipelineLayout displayPipelineLayout;
-	VkPipeline displayPipeline;
-
-	VkPipelineLayout extrapolatePipelineLayoutU;
-	VkPipeline extrapolatePipelineU;
-
-	VkPipelineLayout extrapolatePipelineLayoutV;
-	VkPipeline extrapolatePipelineV;
-
-	VkPipelineLayout advectVelPipelineLayout;
-	VkPipeline advectVelPipeline;
-
-	VkPipelineLayout calcDivergencePipelineLayout;
-	VkPipeline calcDivergencePipeline;
+	Utils::ComputeShader displayShader;
+	Utils::ComputeShader advectionShader;
+	Utils::ComputeShader divergenceShader;
+	Utils::ComputeShader pressureShader;
+	Utils::ComputeShader applyPressureShader;
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -141,6 +134,9 @@ private:
 	std::vector<VkBuffer> divergenceBuffers;
 	std::vector<VkDeviceMemory> divergenceBuffersMemory;
 
+	std::vector<VkBuffer> pressureBuffers;
+	std::vector<VkDeviceMemory> pressureBuffersMemory;
+
 	std::vector<VkSemaphore> imageAvailableSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> inFlightFences;
@@ -149,18 +145,11 @@ private:
 	float lastFrameTime = 0.0f;
 	double lastTime = 0.0;
 
-	VkDescriptorSetLayout displayDescriptorSetLayout;
 	std::vector<VkDescriptorSet> displayDescriptorSets;
-
-	VkDescriptorSetLayout extrapolateDescriptorSetLayout;
-	std::vector<VkDescriptorSet> extrapolateDescriptorSetsU;
-	std::vector<VkDescriptorSet> extrapolateDescriptorSetsV;
-
-	VkDescriptorSetLayout advectVelDescriptorSetLayout;
-	std::vector<VkDescriptorSet> advectVelDescriptorSets;
-
-	VkDescriptorSetLayout calcDivergenceDescriptorSetLayout;
-	std::vector<VkDescriptorSet> calcDivergenceDescriptorSets;
+	std::vector<VkDescriptorSet> advectionDescriptorSets;
+	std::vector<VkDescriptorSet> divergenceDescriptorSets;
+	std::vector<VkDescriptorSet> pressureDescriptorSets;
+	std::vector<VkDescriptorSet> applyPressureDescriptorSets;
 
 	VkDescriptorPool descriptorPool;
 
@@ -198,24 +187,28 @@ private:
 		createDisplayDescriptorSetLayout();
 		createDisplayPipeline();
 
-		createExtrapolateDescriptorSetLayout();
-		createExtrapolatePipelineU();
-		createExtrapolatePipelineV();
+		//createAdvectionDescriptorSetLayout();
+		//createAdvectionPipeline();
 
-		createAdvectVelDescriptorSetLayout();
-		createAdvectVelPipeline();
+		createDivergenceDescriptorSetLayout();
+		createDivergencePipeline();
 
-		createCalcDivergenceDescriptorSetLayout();
-		createCalcDivergencePipeline();
+		createPressureDescriptorSetLayout();
+		createPressurePipeline();
+
+		createApplyPressureDescriptorSetLayout();
+		createApplyPressurePipeline();
 
 		createCommandPool();
 
 		createShaderStorageBuffers();
 		createDescriptorPool();
 		createDisplayDescriptorSets();
-		createExtrapolateDescriptorSets();
-		createAdvectVelDescriptorSets();
-		createCalcDivergenceDescriptorSets();
+		//createAdvectionDescriptorSets();
+		createDivergenceDescriptorSets();
+		createPressureDescriptorSets();
+		createApplyPressureDescriptorSets();
+
 		createCommandBuffers();
 
 		createSyncObjects();
@@ -249,8 +242,8 @@ private:
 
 		vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
 
-		vkDestroyPipeline(device, displayPipeline, nullptr);
-		vkDestroyPipelineLayout(device, displayPipelineLayout, nullptr);
+		vkDestroyPipeline(device, displayShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, displayShader.pipelineLayout, nullptr);
 
 		for (auto imageView : swapChainImageViews) {
 			vkDestroyImageView(device, imageView, nullptr);
@@ -277,18 +270,12 @@ private:
 
 		cleanupSwapChain();
 
-		vkDestroyPipeline(device, extrapolatePipelineU, nullptr);
-		vkDestroyPipelineLayout(device, extrapolatePipelineLayoutU, nullptr);
+		vkDestroyPipeline(device, advectionShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, advectionShader.pipelineLayout, nullptr);
 
-		vkDestroyPipeline(device, extrapolatePipelineV, nullptr);
-		vkDestroyPipelineLayout(device, extrapolatePipelineLayoutV, nullptr);
-
-		vkDestroyPipeline(device, advectVelPipeline, nullptr);
-		vkDestroyPipelineLayout(device, advectVelPipelineLayout, nullptr);
-
-		vkDestroyDescriptorSetLayout(device, displayDescriptorSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(device, extrapolateDescriptorSetLayout, nullptr);
-		vkDestroyDescriptorSetLayout(device, advectVelDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, displayShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, advectionShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, divergenceShader.descLayout, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -329,10 +316,7 @@ private:
 		createDescriptorPool();
 		createDisplayDescriptorSets();
 		createDisplayPipeline();
-		createExtrapolateDescriptorSets();
-		createExtrapolatePipelineU();
-		createExtrapolatePipelineV();
-		createAdvectVelPipeline();
+		createAdvectionPipeline();
 		createCommandBuffers();
 
 	}
@@ -560,208 +544,23 @@ private:
 	}
 
 	void createDisplayPipeline() {
-		auto shader = readFile("../shaders/displayVelocity.comp.spv");
-		VkShaderModule shaderModule = createShaderModule(shader);
-
-		VkPipelineShaderStageCreateInfo shaderStageInfo{};
-		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		shaderStageInfo.module = shaderModule;
-		shaderStageInfo.pName = "main";
-
-		VkPushConstantRange pcr{};
-		pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pcr.offset = 0;
-		pcr.size = sizeof(PushConstants);
-
-		VkPipelineLayoutCreateInfo displayPipelineLayoutInfo{};
-		displayPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		displayPipelineLayoutInfo.setLayoutCount = 1; // Optional
-		displayPipelineLayoutInfo.pSetLayouts = &displayDescriptorSetLayout; // Optional
-		displayPipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-		displayPipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
-
-		if (vkCreatePipelineLayout(device, &displayPipelineLayoutInfo, nullptr, &displayPipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create displayPipeline layout!");
-		}
-
-		VkComputePipelineCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		info.layout = displayPipelineLayout;
-		info.basePipelineIndex = -1;
-		info.basePipelineHandle = VK_NULL_HANDLE;
-		info.stage = shaderStageInfo;
-
-
-		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &displayPipeline) != VK_SUCCESS) {
-			throw std::runtime_error("compute shader");
-		}
-
-		vkDestroyShaderModule(device, shaderModule, nullptr);
+		Utils::createPipeline(device, "displayVelocity.comp", displayShader, sizeof(PushConstants));
 	}
 
-	void createExtrapolatePipelineU() {
-		auto shader = readFile("../shaders/extrapolateU.comp.spv");
-		VkShaderModule shaderModule = createShaderModule(shader);
-
-		VkPipelineShaderStageCreateInfo shaderStageInfo{};
-		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		shaderStageInfo.module = shaderModule;
-		shaderStageInfo.pName = "main";
-
-		VkPushConstantRange pcr{};
-		pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pcr.offset = 0;
-		pcr.size = sizeof(PushConstants);
-
-		VkPipelineLayoutCreateInfo extrapolatePipelineLayoutInfo{};
-		extrapolatePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		extrapolatePipelineLayoutInfo.setLayoutCount = 1; // Optional
-		extrapolatePipelineLayoutInfo.pSetLayouts = &extrapolateDescriptorSetLayout; // Optional
-		extrapolatePipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-		extrapolatePipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
-
-		if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayoutU) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create extrapolatePipeline layout!");
-		}
-
-		VkComputePipelineCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		info.layout = extrapolatePipelineLayoutU;
-		info.basePipelineIndex = -1;
-		info.basePipelineHandle = VK_NULL_HANDLE;
-		info.stage = shaderStageInfo;
-
-
-		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipelineU) != VK_SUCCESS) {
-			throw std::runtime_error("compute shader");
-		}
-
-		vkDestroyShaderModule(device, shaderModule, nullptr);
+	void createAdvectionPipeline() {
+		Utils::createPipeline(device, "advectVelocity.comp", advectionShader, sizeof(PushConstants));
 	}
 
-	void createExtrapolatePipelineV() {
-		auto shader = readFile("../shaders/extrapolateV.comp.spv");
-		VkShaderModule shaderModule = createShaderModule(shader);
-
-		VkPipelineShaderStageCreateInfo shaderStageInfo{};
-		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		shaderStageInfo.module = shaderModule;
-		shaderStageInfo.pName = "main";
-
-		VkPushConstantRange pcr{};
-		pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pcr.offset = 0;
-		pcr.size = sizeof(PushConstants);
-
-		VkPipelineLayoutCreateInfo extrapolatePipelineLayoutInfo{};
-		extrapolatePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		extrapolatePipelineLayoutInfo.setLayoutCount = 1; // Optional
-		extrapolatePipelineLayoutInfo.pSetLayouts = &extrapolateDescriptorSetLayout; // Optional
-		extrapolatePipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-		extrapolatePipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
-
-		if (vkCreatePipelineLayout(device, &extrapolatePipelineLayoutInfo, nullptr, &extrapolatePipelineLayoutV) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create extrapolatePipeline layout!");
-		}
-
-		VkComputePipelineCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		info.layout = extrapolatePipelineLayoutV;
-		info.basePipelineIndex = -1;
-		info.basePipelineHandle = VK_NULL_HANDLE;
-		info.stage = shaderStageInfo;
-
-
-		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &extrapolatePipelineV) != VK_SUCCESS) {
-			throw std::runtime_error("compute shader");
-		}
-
-		vkDestroyShaderModule(device, shaderModule, nullptr);
+	void createDivergencePipeline() {
+		Utils::createPipeline(device, "calcDivergence.comp", divergenceShader, sizeof(PushConstants));
 	}
 
-	void createAdvectVelPipeline() {
-		auto shader = readFile("../shaders/advectVelocity.comp.spv");
-		VkShaderModule shaderModule = createShaderModule(shader);
-
-		VkPipelineShaderStageCreateInfo shaderStageInfo{};
-		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		shaderStageInfo.module = shaderModule;
-		shaderStageInfo.pName = "main";
-
-		VkPushConstantRange pcr{};
-		pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pcr.offset = 0;
-		pcr.size = sizeof(PushConstants);
-
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1; // Optional
-		pipelineLayoutInfo.pSetLayouts = &advectVelDescriptorSetLayout; // Optional
-		pipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-		pipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
-
-		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &advectVelPipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create advectPipeline layout!");
-		}
-
-		VkComputePipelineCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		info.layout = advectVelPipelineLayout;
-		info.basePipelineIndex = -1;
-		info.basePipelineHandle = VK_NULL_HANDLE;
-		info.stage = shaderStageInfo;
-
-
-		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &advectVelPipeline) != VK_SUCCESS) {
-			throw std::runtime_error("compute shader");
-		}
-
-		vkDestroyShaderModule(device, shaderModule, nullptr);
+	void createPressurePipeline() {
+		Utils::createPipeline(device, "projectPressure.comp", pressureShader, sizeof(PushConstants));
 	}
 
-	void createCalcDivergencePipeline() {
-		auto shader = readFile("../shaders/calcDivergence.comp.spv");
-		VkShaderModule shaderModule = createShaderModule(shader);
-
-		VkPipelineShaderStageCreateInfo shaderStageInfo{};
-		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		shaderStageInfo.module = shaderModule;
-		shaderStageInfo.pName = "main";
-
-		VkPushConstantRange pcr{};
-		pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-		pcr.offset = 0;
-		pcr.size = sizeof(PushConstants);
-
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 1; // Optional
-		pipelineLayoutInfo.pSetLayouts = &calcDivergenceDescriptorSetLayout; // Optional
-		pipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
-		pipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
-
-		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &calcDivergencePipelineLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create advectPipeline layout!");
-		}
-
-		VkComputePipelineCreateInfo info{};
-		info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		info.layout = calcDivergencePipelineLayout;
-		info.basePipelineIndex = -1;
-		info.basePipelineHandle = VK_NULL_HANDLE;
-		info.stage = shaderStageInfo;
-
-
-		if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &calcDivergencePipeline) != VK_SUCCESS) {
-			throw std::runtime_error("compute shader");
-		}
-
-		vkDestroyShaderModule(device, shaderModule, nullptr);
+	void createApplyPressurePipeline() {
+		Utils::createPipeline(device, "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
 	}
 
 	void createShaderStorageBuffers() {
@@ -769,9 +568,11 @@ private:
 		// solid cells
 		std::vector<int> solids(SIM_WIDTH * SIM_HEIGHT);
 		// horizontal velocity
-		std::vector<float> u(SIM_WIDTH * SIM_HEIGHT, 0.0f);
+		std::vector<float> u((SIM_WIDTH + 1) * (SIM_HEIGHT + 1), 0.0f);
 		// vertical velocity
-		std::vector<float> v(SIM_WIDTH * SIM_HEIGHT, 0.0f);
+		std::vector<float> v((SIM_WIDTH + 1) * (SIM_HEIGHT + 1), 0.0f);
+		// pressure
+		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
 
 		unsigned int obstacleX = SIM_WIDTH / 4;
 		unsigned int obstacleY = SIM_HEIGHT / 2;
@@ -784,9 +585,6 @@ private:
 					s = 0; // solid
 				}
 
-				if (i == j) s = 1;
-				if (i == SIM_WIDTH - 1) s = 1;
-
 				int dx = i - obstacleX;
 				int dy = j - obstacleY;
 
@@ -795,11 +593,11 @@ private:
 				}
 
 				solids[i + SIM_WIDTH * j] = s;
-
-				if (i == 1) {
-					u[i + SIM_WIDTH * j] = 1.0f;
-				}
 			}
+		}
+
+		for (int j = 1; j < SIM_HEIGHT; j++) {
+			u[1 + (SIM_WIDTH + 1) * j] = 1.0f; // initial velocity
 		}
 
 		// copy solids to GPU
@@ -835,7 +633,7 @@ private:
 			velocityUBuffers.resize(swapChainImages.size());
 			velocityUBuffersMemory.resize(swapChainImages.size());
 
-			VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT + 1);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -862,7 +660,7 @@ private:
 			velocityVBuffers.resize(swapChainImages.size());
 			velocityVBuffersMemory.resize(swapChainImages.size());
 
-			VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT + 1);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -893,6 +691,32 @@ private:
 			for (size_t i = 0; i < swapChainImages.size(); i++) {
 				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, divergenceBuffers[i], divergenceBuffersMemory[i]);
 			}
+		}
+
+		// pressure
+		{
+			pressureBuffers.resize(swapChainImages.size());
+			pressureBuffersMemory.resize(swapChainImages.size());
+
+			VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+			VkBuffer stagingBuffer;
+			VkDeviceMemory stagingBufferMemory;
+
+			Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+			void* data;
+			vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+			memcpy(data, p.data(), (size_t)bufferSize);
+			vkUnmapMemory(device, stagingBufferMemory);
+
+			// Copy initial data to all storage buffers
+			for (size_t i = 0; i < swapChainImages.size(); i++) {
+				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, pressureBuffers[i], pressureBuffersMemory[i]);
+				Utils::copyBuffer(device, stagingBuffer, pressureBuffers[i], bufferSize, commandPool, computeQueue);
+			}
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vkFreeMemory(device, stagingBufferMemory, nullptr);
 		}
 
 	}
@@ -966,26 +790,52 @@ private:
 		pc.sim_height = SIM_HEIGHT;
 		pc.deltaTime = (float)lastFrameTime;
 
-		vkCmdPushConstants(commandBuffers[imageIdx], advectVelPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+		vkCmdPushConstants(commandBuffers[imageIdx], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, calcDivergencePipeline);
-		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, calcDivergencePipelineLayout, 0, 1, &calcDivergenceDescriptorSets[imageIdx], 0, nullptr);
+		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[imageIdx], 0, nullptr);
 		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
 
-		VkMemoryBarrier barrier;
-		barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-		barrier.pNext = NULL;
-		barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		for (int i = 0; i < 11; i++) {
+			int pingpong = i % 2;
+			VkMemoryBarrier barrier;
+			barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			barrier.pNext = NULL;
+			barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-		vkCmdPipelineBarrier(commandBuffers[imageIdx], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier, 0, nullptr, 0, nullptr);
+			vkCmdPipelineBarrier(commandBuffers[imageIdx], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier, 0, nullptr, 0, nullptr);
 
-		vkCmdPushConstants(commandBuffers[imageIdx], advectVelPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+			vkCmdPushConstants(commandBuffers[imageIdx], pressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectVelPipeline);
-		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectVelPipelineLayout, 0, 1, &advectVelDescriptorSets[imageIdx], 0, nullptr);
+			vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipelineLayout, 0, 1, &pressureDescriptorSets[2 * imageIdx + pingpong], 0, nullptr);
+			vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+
+		}
+		
+		VkMemoryBarrier barrier2;
+		barrier2.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+		barrier2.pNext = NULL;
+		barrier2.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		vkCmdPipelineBarrier(commandBuffers[imageIdx], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier2, 0, nullptr, 0, nullptr);
+
+		vkCmdPushConstants(commandBuffers[imageIdx], applyPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipelineLayout, 0, 1, &applyPressureDescriptorSets[imageIdx], 0, nullptr);
 		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
 
+
+		/*
+		vkCmdPushConstants(commandBuffers[imageIdx], advectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[imageIdx], 0, nullptr);
+		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		
 		VkMemoryBarrier barrier_advect;
 		barrier_advect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
 		barrier_advect.pNext = NULL;
@@ -1005,16 +855,16 @@ private:
 		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineV);
 		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutV, 0, 1, &extrapolateDescriptorSetsV[imageIdx], 0, nullptr);
 		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 63) / 64, 1, 1);
-
+		*/
 		recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 			VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-		vkCmdPushConstants(commandBuffers[imageIdx], displayPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+		vkCmdPushConstants(commandBuffers[imageIdx], displayShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayPipeline);
-		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayPipelineLayout, 0, 1, &displayDescriptorSets[imageIdx], 0, nullptr);
+		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipelineLayout, 0, 1, &displayDescriptorSets[imageIdx], 0, nullptr);
 		vkCmdDispatch(commandBuffers[imageIdx], (WIDTH + 31) / 32, (HEIGHT + 31) / 32, 1);
 
 		recordImageBarrier(commandBuffers[imageIdx], swapChainImages[imageIdx],
@@ -1057,76 +907,53 @@ private:
 		Utils::addStorageBuffer(layoutBindings, 1);
 		Utils::addStorageBuffer(layoutBindings, 2);
 		Utils::addStorageBuffer(layoutBindings, 3);
+		Utils::addStorageBuffer(layoutBindings, 4);
 
-		Utils::createDescriptorSetLayout(device, layoutBindings, displayDescriptorSetLayout);
+		Utils::createDescriptorSetLayout(device, layoutBindings, displayShader.descLayout);
 	}
 
-	void createExtrapolateDescriptorSetLayout() {
+	void createAdvectionDescriptorSetLayout() {
 
-		std::array<VkDescriptorSetLayoutBinding, 1> layoutBindings{};
-
-		// velocity u buffer
-		layoutBindings[0].binding = 0;
-		layoutBindings[0].descriptorCount = 1;
-		layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		layoutBindings[0].pImmutableSamplers = nullptr;
-		layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 1;
-		layoutInfo.pBindings = layoutBindings.data();
-
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &extrapolateDescriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create descriptor set layout!");
-		}
-
-	}
-
-	void createAdvectVelDescriptorSetLayout() {
-
-		std::array<VkDescriptorSetLayoutBinding, 5> layoutBindings{};
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 
 		for (int i = 0; i < 5; i++) {
-			layoutBindings[i].binding = i;
-			layoutBindings[i].descriptorCount = 1;
-			layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			layoutBindings[i].pImmutableSamplers = nullptr;
-			layoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			Utils::addStorageBuffer(layoutBindings, i);
 		}
 
-		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 5;
-		layoutInfo.pBindings = layoutBindings.data();
-
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &advectVelDescriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create descriptor set layout!");
-		}
-
+		Utils::createDescriptorSetLayout(device, layoutBindings, advectionShader.descLayout);
 	}
 
-	void createCalcDivergenceDescriptorSetLayout() {
+	void createDivergenceDescriptorSetLayout() {
 
-		std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 
 		for (int i = 0; i < 4; i++) {
-			layoutBindings[i].binding = i;
-			layoutBindings[i].descriptorCount = 1;
-			layoutBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			layoutBindings[i].pImmutableSamplers = nullptr;
-			layoutBindings[i].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			Utils::addStorageBuffer(layoutBindings, i);
 		}
 
-		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 4;
-		layoutInfo.pBindings = layoutBindings.data();
+		Utils::createDescriptorSetLayout(device, layoutBindings, divergenceShader.descLayout);
+	}
 
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &calcDivergenceDescriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create descriptor set layout!");
+	void createPressureDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 4; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
 		}
 
+		Utils::createDescriptorSetLayout(device, layoutBindings, pressureShader.descLayout);
+	}
+
+	void createApplyPressureDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 6; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
+		}
+
+		Utils::createDescriptorSetLayout(device, layoutBindings, applyPressureShader.descLayout);
 	}
 
 	void createDescriptorPool() {
@@ -1135,8 +962,9 @@ private:
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
+		const size_t NUM_BUFFERS = 4 + 4*2 + 6 + 4;
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * 13);
+		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * NUM_BUFFERS);
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1151,7 +979,7 @@ private:
 	}
 
 	void createDisplayDescriptorSets() {
-		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), displayDescriptorSetLayout);
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), displayShader.descLayout);
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
@@ -1170,98 +998,123 @@ private:
 			Utils::bindBuffer(device, solidBuffers[i], displayDescriptorSets[i], 1);
 			Utils::bindBuffer(device, velocityUBuffers[i], displayDescriptorSets[i], 2);
 			Utils::bindBuffer(device, velocityVBuffers[i], displayDescriptorSets[i], 3);
+			Utils::bindBuffer(device, pressureBuffers[i], displayDescriptorSets[i], 4);
 		}
 	}
 
-	void createExtrapolateDescriptorSets() {
-		{
-			std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
-			VkDescriptorSetAllocateInfo allocInfo{};
-			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocInfo.descriptorPool = descriptorPool;
-			allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
-			allocInfo.pSetLayouts = layouts.data();
-
-			extrapolateDescriptorSetsU.resize(swapChainImages.size());
-			if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSetsU.data()) != VK_SUCCESS) {
-				throw std::runtime_error("failed to allocate descriptor sets!");
-			}
-
-			for (size_t i = 0; i < swapChainImages.size(); i++) {
-				Utils::bindBuffer(device, velocityUBuffers[i], extrapolateDescriptorSetsU[i], 0);
-			}
-		}
-		{
-			std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), extrapolateDescriptorSetLayout);
-			VkDescriptorSetAllocateInfo allocInfo{};
-			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-			allocInfo.descriptorPool = descriptorPool;
-			allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
-			allocInfo.pSetLayouts = layouts.data();
-
-			extrapolateDescriptorSetsV.resize(swapChainImages.size());
-			if (vkAllocateDescriptorSets(device, &allocInfo, extrapolateDescriptorSetsV.data()) != VK_SUCCESS) {
-				throw std::runtime_error("failed to allocate descriptor sets!");
-			}
-
-			for (size_t i = 0; i < swapChainImages.size(); i++) {
-				Utils::bindBuffer(device, velocityVBuffers[i], extrapolateDescriptorSetsV[i], 0);
-			}
-		}
-
-	}
-
-	void createAdvectVelDescriptorSets() {
-		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), advectVelDescriptorSetLayout);
+	void createAdvectionDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), advectionShader.descLayout);
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
 		allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
 		allocInfo.pSetLayouts = layouts.data();
 
-		advectVelDescriptorSets.resize(swapChainImages.size());
-		if (vkAllocateDescriptorSets(device, &allocInfo, advectVelDescriptorSets.data()) != VK_SUCCESS) {
+		advectionDescriptorSets.resize(swapChainImages.size());
+		if (vkAllocateDescriptorSets(device, &allocInfo, advectionDescriptorSets.data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate descriptor sets!");
 		}
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
 
-			Utils::bindBuffer(device, solidBuffers[i], advectVelDescriptorSets[i], 0);
+			Utils::bindBuffer(device, solidBuffers[i], advectionDescriptorSets[i], 0);
 
 			// i_old is index of previous frame
 			size_t i_old = (i - 1) % swapChainImages.size();
 
-			Utils::bindBuffer(device, velocityUBuffers[i_old], advectVelDescriptorSets[i], 1);
-			Utils::bindBuffer(device, velocityVBuffers[i_old], advectVelDescriptorSets[i], 2);
+			Utils::bindBuffer(device, velocityUBuffers[i_old], advectionDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[i_old], advectionDescriptorSets[i], 2);
 
-			Utils::bindBuffer(device, velocityUBuffers[i], advectVelDescriptorSets[i], 3);
-			Utils::bindBuffer(device, velocityVBuffers[i], advectVelDescriptorSets[i], 4);
+			Utils::bindBuffer(device, velocityUBuffers[i], advectionDescriptorSets[i], 3);
+			Utils::bindBuffer(device, velocityVBuffers[i], advectionDescriptorSets[i], 4);
 		}
 	}
 
-	void createCalcDivergenceDescriptorSets() {
-		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), calcDivergenceDescriptorSetLayout);
+	void createDivergenceDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), divergenceShader.descLayout);
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		allocInfo.descriptorPool = descriptorPool;
 		allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
 		allocInfo.pSetLayouts = layouts.data();
 
-		calcDivergenceDescriptorSets.resize(swapChainImages.size());
-		if (vkAllocateDescriptorSets(device, &allocInfo, calcDivergenceDescriptorSets.data()) != VK_SUCCESS) {
+		divergenceDescriptorSets.resize(swapChainImages.size());
+		if (vkAllocateDescriptorSets(device, &allocInfo, divergenceDescriptorSets.data()) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate descriptor sets!");
 		}
 
 		for (size_t i = 0; i < swapChainImages.size(); i++) {
 
-			Utils::bindBuffer(device, solidBuffers[i], calcDivergenceDescriptorSets[i], 0);
+			Utils::bindBuffer(device, solidBuffers[i], divergenceDescriptorSets[i], 0);
 
 			// i_old is index of previous frame
 			size_t i_old = (i - 1) % swapChainImages.size();
-			Utils::bindBuffer(device, velocityUBuffers[i_old], calcDivergenceDescriptorSets[i], 1);
-			Utils::bindBuffer(device, velocityVBuffers[i_old], calcDivergenceDescriptorSets[i], 2);
+			Utils::bindBuffer(device, velocityUBuffers[i_old], divergenceDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[i_old], divergenceDescriptorSets[i], 2);
 
-			Utils::bindBuffer(device, divergenceBuffers[i], calcDivergenceDescriptorSets[i], 3);
+			Utils::bindBuffer(device, divergenceBuffers[i], divergenceDescriptorSets[i], 3);
+		}
+	}
+
+	void createPressureDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size() * 2, pressureShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size() * 2);
+		allocInfo.pSetLayouts = layouts.data();
+
+		pressureDescriptorSets.resize(swapChainImages.size() * 2);
+		if (vkAllocateDescriptorSets(device, &allocInfo, pressureDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+			Utils::bindBuffer(device, solidBuffers[i], pressureDescriptorSets[2 * i], 0);
+
+			Utils::bindBuffer(device, divergenceBuffers[i], pressureDescriptorSets[2 * i], 1);
+
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % swapChainImages.size();
+			Utils::bindBuffer(device, pressureBuffers[i_old], pressureDescriptorSets[2 * i], 2);
+
+			Utils::bindBuffer(device, pressureBuffers[i], pressureDescriptorSets[2 * i], 3);
+
+			// pingpong
+			Utils::bindBuffer(device, solidBuffers[i], pressureDescriptorSets[2 * i + 1], 0);
+			Utils::bindBuffer(device, divergenceBuffers[i], pressureDescriptorSets[2 * i + 1], 1);
+			Utils::bindBuffer(device, pressureBuffers[i], pressureDescriptorSets[2 * i + 1], 2);
+			Utils::bindBuffer(device, pressureBuffers[i_old], pressureDescriptorSets[2 * i + 1], 3);
+		}
+	}
+
+	void createApplyPressureDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), applyPressureShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+		allocInfo.pSetLayouts = layouts.data();
+
+		applyPressureDescriptorSets.resize(swapChainImages.size());
+		if (vkAllocateDescriptorSets(device, &allocInfo, applyPressureDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+
+			Utils::bindBuffer(device, solidBuffers[i], applyPressureDescriptorSets[i], 0);
+
+			Utils::bindBuffer(device, pressureBuffers[i], applyPressureDescriptorSets[i], 1);
+
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % swapChainImages.size();
+			Utils::bindBuffer(device, velocityUBuffers[i_old], applyPressureDescriptorSets[i], 2);
+			Utils::bindBuffer(device, velocityVBuffers[i_old], applyPressureDescriptorSets[i], 3);
+
+			Utils::bindBuffer(device, velocityUBuffers[i], applyPressureDescriptorSets[i], 4);
+			Utils::bindBuffer(device, velocityVBuffers[i], applyPressureDescriptorSets[i], 5);
 		}
 	}
 
@@ -1335,19 +1188,7 @@ private:
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
-	VkShaderModule createShaderModule(const std::vector<char>& code) {
-		VkShaderModuleCreateInfo createInfo{};
-		createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		createInfo.codeSize = code.size();
-		createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-		VkShaderModule shaderModule;
-		if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create shader module!");
-		}
-
-		return shaderModule;
-	}
+	
 
 	bool CheckFormatSupport(VkPhysicalDevice gpu, VkFormat format, VkFormatFeatureFlags requestedSupport) {
 		VkFormatProperties vkFormatProperties;
@@ -1518,24 +1359,6 @@ private:
 		}
 
 		return true;
-	}
-
-	static std::vector<char> readFile(const std::string& filename) {
-		std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-		if (!file.is_open()) {
-			throw std::runtime_error("failed to open file!");
-		}
-
-		size_t fileSize = (size_t)file.tellg();
-		std::vector<char> buffer(fileSize);
-
-		file.seekg(0);
-		file.read(buffer.data(), fileSize);
-
-		file.close();
-
-		return buffer;
 	}
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity, VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) {

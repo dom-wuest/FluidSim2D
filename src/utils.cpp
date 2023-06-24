@@ -167,4 +167,82 @@ namespace Utils {
         layoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
         bindings.push_back(layoutBinding);
     }
+
+    VkShaderModule createShaderModule(VkDevice& device, const std::vector<char>& code) {
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = code.size();
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shader module!");
+        }
+
+        return shaderModule;
+    }
+
+    static std::vector<char> readFile(const std::string& filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        if (!file.is_open()) {
+            throw std::runtime_error("failed to open file!");
+        }
+
+        size_t fileSize = (size_t)file.tellg();
+        std::vector<char> buffer(fileSize);
+
+        file.seekg(0);
+        file.read(buffer.data(), fileSize);
+
+        file.close();
+
+        return buffer;
+    }
+
+    void createPipeline(VkDevice& device, const std::string& shaderFile, ComputeShader& computeShader, uint32_t pushConstantSize) {
+        auto shader = readFile("../shaders/" + shaderFile + ".spv");
+        VkShaderModule shaderModule = createShaderModule(device, shader);
+
+        VkPipelineShaderStageCreateInfo shaderStageInfo{};
+        shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+        shaderStageInfo.module = shaderModule;
+        shaderStageInfo.pName = "main";
+
+        VkPushConstantRange pcr{};
+        pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pcr.offset = 0;
+        pcr.size = pushConstantSize;
+
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1; // Optional
+        pipelineLayoutInfo.pSetLayouts = &computeShader.descLayout; // Optional
+        if (pushConstantSize > 0) {
+            pipelineLayoutInfo.pushConstantRangeCount = 1; // Optional
+            pipelineLayoutInfo.pPushConstantRanges = &pcr; // Optional
+        }
+        else {
+            pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
+        }
+
+        if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &computeShader.pipelineLayout) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create pipeline layout!");
+        }
+
+        VkComputePipelineCreateInfo info{};
+        info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        info.layout = computeShader.pipelineLayout;
+        info.basePipelineIndex = -1;
+        info.basePipelineHandle = VK_NULL_HANDLE;
+        info.stage = shaderStageInfo;
+
+
+        if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &info, nullptr, &computeShader.pipeline) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create pipeline!");
+        }
+
+        vkDestroyShaderModule(device, shaderModule, nullptr);
+    }
 }
