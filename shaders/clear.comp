@@ -1,19 +1,7 @@
 #version 450
 
-layout (binding = 0) buffer SolidsIn {
-    int s[ ];
-};
-
-layout (binding = 1) buffer DivIn {
-    float div[ ];
-};
-
-layout (binding = 2) buffer PIn {
-    float p_in[ ];
-};
-
-layout (binding = 3) buffer POut {
-    float p_out[ ];
+layout (binding = 0) buffer POut {
+    float pressure[ ];
 };
 
 layout (push_constant) uniform PushConstants
@@ -38,28 +26,5 @@ void main(){
         return;
     }
 
-    if(s[S_COORD(gIDx, gIDy)] == 0){
-        return;
-    }
-
-    int s_l = gIDx > 0 ? s[S_COORD(gIDx - 1, gIDy)] : 0;
-    int s_r = gIDx < (p.sim_width - 1) ? s[S_COORD(gIDx + 1, gIDy)] : 0;
-    int s_t = gIDy > 0 ? s[S_COORD(gIDx, gIDy - 1)] : 0;
-    int s_b = gIDy < (p.sim_height - 1) ? s[S_COORD(gIDx, gIDy + 1)] : 0;
-    int s_sum = s_l + s_r + s_t + s_b;
-
-    if(s_sum == 0) {
-        return;
-    }
-
-    float p_l = gIDx > 0 ? p_in[S_COORD(gIDx - 1, gIDy)] : 0.0;
-    float p_r = gIDx < (p.sim_width - 1) ? p_in[S_COORD(gIDx + 1, gIDy)] : 0.0;
-    float p_t = gIDy > 0 ? p_in[S_COORD(gIDx, gIDy - 1)] : 0.0;
-    float p_b = gIDy < (p.sim_height - 1) ? p_in[S_COORD(gIDx, gIDy + 1)] : 0.0;
-
-    float divergence = div[S_COORD(gIDx, gIDy)];
-
-    float pressure = (p_l + p_r + p_t + p_b - divergence) / float(s_sum);
-    
-    p_out[S_COORD(gIDx, gIDy)] = pressure;
+    pressure[S_COORD(gIDx, gIDy)] = 0.0;
 }

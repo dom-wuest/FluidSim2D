@@ -19,8 +19,8 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const uint32_t SIM_WIDTH = 80;
-const uint32_t SIM_HEIGHT = 60;
+const uint32_t SIM_WIDTH = 160;
+const uint32_t SIM_HEIGHT = 120;
 
 const size_t NUM_STORAGE_BUFFERS = 4;
 
@@ -118,6 +118,7 @@ private:
 	Utils::ComputeShader divergenceShader;
 	Utils::ComputeShader pressureShader;
 	Utils::ComputeShader applyPressureShader;
+	Utils::ComputeShader clearPressureShader;
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -150,6 +151,7 @@ private:
 	std::vector<VkDescriptorSet> divergenceDescriptorSets;
 	std::vector<VkDescriptorSet> pressureDescriptorSets;
 	std::vector<VkDescriptorSet> applyPressureDescriptorSets;
+	std::vector<VkDescriptorSet> clearPressureDescriptorSets;
 
 	VkDescriptorPool descriptorPool;
 
@@ -196,6 +198,9 @@ private:
 		createPressureDescriptorSetLayout();
 		createPressurePipeline();
 
+		createClearPressureDescriptorSetLayout();
+		createClearPressurePipeline();
+
 		createApplyPressureDescriptorSetLayout();
 		createApplyPressurePipeline();
 
@@ -207,6 +212,7 @@ private:
 		//createAdvectionDescriptorSets();
 		createDivergenceDescriptorSets();
 		createPressureDescriptorSets();
+		createClearPressureDescriptorSets();
 		createApplyPressureDescriptorSets();
 
 		createCommandBuffers();
@@ -559,6 +565,10 @@ private:
 		Utils::createPipeline(device, "projectPressure.comp", pressureShader, sizeof(PushConstants));
 	}
 
+	void createClearPressurePipeline() {
+		Utils::createPipeline(device, "clear.comp", clearPressureShader, sizeof(PushConstants));
+	}
+
 	void createApplyPressurePipeline() {
 		Utils::createPipeline(device, "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
 	}
@@ -596,7 +606,7 @@ private:
 			}
 		}
 
-		for (int j = 1; j < SIM_HEIGHT; j++) {
+		for (int j = 1; j < SIM_HEIGHT-1; j++) {
 			u[1 + (SIM_WIDTH + 1) * j] = 1.0f; // initial velocity
 		}
 
@@ -796,6 +806,12 @@ private:
 		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[imageIdx], 0, nullptr);
 		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
 
+		vkCmdPushConstants(commandBuffers[imageIdx], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+		vkCmdBindPipeline(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[imageIdx], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[imageIdx], 0, nullptr);
+		vkCmdDispatch(commandBuffers[imageIdx], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+
 		for (int i = 0; i < 11; i++) {
 			int pingpong = i % 2;
 			VkMemoryBarrier barrier;
@@ -945,6 +961,17 @@ private:
 		Utils::createDescriptorSetLayout(device, layoutBindings, pressureShader.descLayout);
 	}
 
+	void createClearPressureDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 1; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
+		}
+
+		Utils::createDescriptorSetLayout(device, layoutBindings, clearPressureShader.descLayout);
+	}
+
 	void createApplyPressureDescriptorSetLayout() {
 
 		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
@@ -962,7 +989,7 @@ private:
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
-		const size_t NUM_BUFFERS = 4 + 4*2 + 6 + 4;
+		const size_t NUM_BUFFERS = 4 + 4*2 + 6 + 4 + 1;
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * NUM_BUFFERS);
 
@@ -970,7 +997,7 @@ private:
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 5);
+		poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size() * 6);
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -1086,6 +1113,26 @@ private:
 			Utils::bindBuffer(device, divergenceBuffers[i], pressureDescriptorSets[2 * i + 1], 1);
 			Utils::bindBuffer(device, pressureBuffers[i], pressureDescriptorSets[2 * i + 1], 2);
 			Utils::bindBuffer(device, pressureBuffers[i_old], pressureDescriptorSets[2 * i + 1], 3);
+		}
+	}
+
+	void createClearPressureDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), clearPressureShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(swapChainImages.size());
+		allocInfo.pSetLayouts = layouts.data();
+
+		clearPressureDescriptorSets.resize(swapChainImages.size());
+		if (vkAllocateDescriptorSets(device, &allocInfo, clearPressureDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % swapChainImages.size();
+			Utils::bindBuffer(device, pressureBuffers[i_old], clearPressureDescriptorSets[i], 0);
 		}
 	}
 
