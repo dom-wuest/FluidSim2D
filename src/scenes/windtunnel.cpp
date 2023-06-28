@@ -3,7 +3,7 @@
 bool WindTunnelSceneBuilder::build(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
 {
 	unsigned int obstacleX = width / 4;
-	unsigned int obstacleY = height / 2;
+	unsigned int obstacleY = height / 2 + 1;
 	unsigned int obstacleR = height / 6;
 
 	for (unsigned int i = 0; i < width; i++) {
@@ -25,8 +25,11 @@ bool WindTunnelSceneBuilder::build(uint32_t width, uint32_t height, std::vector<
 		}
 	}
 
-	for (int j = 1; j < height; j++) {
-		u[1 + (width + 1) * j] = 1.0f; // initial velocity
+	
+	for (int j = 1; j < height-1; j++) {
+		u[0 + (width + 1) * j] = .99f; // initial velocity
+		u[1 + (width + 1) * j] = .99f; // initial velocity
 	}
+
 	return true;
 }

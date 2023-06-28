@@ -124,14 +124,14 @@ void main(){
     float press = nearest_p(x, y) * 20.0;
     vec4 color = vec4(0.0,0.0,press,1.0);
 #else
-    float vel_u = bilerp_u(x, y) * 0.5;
-    float vel_v = bilerp_v(x, y) * 0.8;
+    float vel_u = bilerp_u(x, y);
+    float vel_v = bilerp_v(x, y) * 1.5;
     vec4 color = vec4(vel_u,vel_v,-vel_v,1.0);
 #endif
 
     if(nearest_s(x,y) < 0.5){
         // solid -> white!
-        color = vec4(1.0,1.0,1.0,1.0);
+        //color = vec4(1.0,1.0,1.0,1.0);
     }
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
 }

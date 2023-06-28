@@ -1,7 +1,7 @@
 #version 450
 
 layout (binding = 0) buffer SolidsIn {
-    float s[ ];
+    int s[ ];
 };
 
 layout (binding = 1) buffer UIn {
@@ -31,19 +31,134 @@ layout (push_constant) uniform PushConstants
 
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
+#define S_COORD(i,j) (i) + (j) * p.sim_width
+#define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+#define V_COORD(i,j) (i) + (j) * p.sim_width
+
+#define ADVECT
+
+float avg_v(int i, int j){
+    int i0 = max(0, i-1);
+    int j1 = min(j+1, int(p.sim_height));
+
+    float A = float(v_in[V_COORD(i0,j)]);
+    float B = float(v_in[V_COORD(i0,j1)]);
+    float C = float(v_in[V_COORD(i,j)]);
+    float D = float(v_in[V_COORD(i,j1)]);
+    return (A + B + C + D) * 0.25;
+}
+
+float avg_u(int i, int j){
+    int i0 = min(i+1, int(p.sim_width));
+    int j1 = max(0, j-1);
+
+    float A = float(u_in[U_COORD(i0,j)]);
+    float B = float(u_in[U_COORD(i0,j1)]);
+    float C = float(u_in[U_COORD(i,j)]);
+    float D = float(u_in[U_COORD(i,j1)]);
+    return (A + B + C + D) * 0.25;
+}
+
+float bilerp_u(float x, float y){
+    // x,y in [0.0,1.0)
+    float s = floor(x * (float(p.sim_width)+1.0));
+    float t = floor(y * (float(p.sim_height)) - 0.5);
+    float dx = x * (float(p.sim_width)+1.0) - s;
+    float dy = y * (float(p.sim_height)) - t - 0.5;
+
+    //s = s + 1.0;
+    //t = t + 1.0;
+
+    int s0 = max(int(s), 0);
+    int s1 = min(int(s) + 1, int(p.sim_width));
+    int t0 = max(int(t), 0);
+    int t1 = min(int(t) + 1, int(p.sim_height) - 1);
+
+    float A = float(u_in[s0 + (p.sim_width+1) * t0]);
+    float B = float(u_in[s1 + (p.sim_width+1) * t0]);
+    float C = float(u_in[s0 + (p.sim_width+1) * t1]);
+    float D = float(u_in[s1 + (p.sim_width+1) * t1]);
+    return (A * (1.0-dx) + B * dx) * (1.0-dy) + (C * (1.0-dx) + D * dx) * dy;
+}
+
+float bilerp_v(float x, float y){
+    // x,y in [0.0,1.0)
+    float s = floor(x * (float(p.sim_width)) - 0.5);
+    float t = floor(y * (float(p.sim_height)+1.0));
+    float dx = x * (float(p.sim_width)) - s -0.5;
+    float dy = y * (float(p.sim_height)+1.0) - t;
+
+    //s = s + 1.0;
+    //t = t + 1.0;
+
+    int s0 = max(int(s), 0);
+    int s1 = min(int(s) + 1, int(p.sim_width) - 1);
+    int t0 = max(int(t), 0);
+    int t1 = min(int(t) + 1, int(p.sim_height));
+
+    float A = float(v_in[s0 + (p.sim_width) * t0]);
+    float B = float(v_in[s1 + (p.sim_width) * t0]);
+    float C = float(v_in[s0 + (p.sim_width) * t1]);
+    float D = float(v_in[s1 + (p.sim_width) * t1]);
+    return (A * (1.0-dx) + B * dx) * (1.0-dy) + (C * (1.0-dx) + D * dx) * dy;
+}
+
 void main(){
 
+#ifdef ADVECT
+    int gIDx;
+    int gIDy;
+
+    // u component
+    gIDx = int(gl_GlobalInvocationID.x) + 1;
+    gIDy = int(gl_GlobalInvocationID.y);
+
+    if(gIDx < p.sim_width && gIDy < p.sim_height){
+        int s_u = s[S_COORD(gIDx - 1, gIDy)] * s[S_COORD(gIDx, gIDy)];
+        if(s_u > 0){
+            float u = u_in[U_COORD(gIDx, gIDy)];
+            float v = avg_v(gIDx, gIDy);
+            float x = float(gIDx) / float(p.sim_width + 1);
+            float y = (float(gIDy) + 0.5) / float(p.sim_height);
+            x = max(min(x - p.deltaTime * u, 1.0), 0.0);
+            y = max(min(y - p.deltaTime * v, 1.0), 0.0);
+            u_out[U_COORD(gIDx, gIDy)] = bilerp_u(x,y);
+        }
+    }
+
+    if(gIDx == p.sim_width) {
+        u_out[U_COORD(gIDx, gIDy)] = u_in[U_COORD(gIDx-1, gIDy)];
+    }
+    
+    // v component
+    gIDx = int(gl_GlobalInvocationID.x);
+    gIDy = int(gl_GlobalInvocationID.y) + 1;
+
+    if(gIDx < p.sim_width && gIDy < p.sim_height){
+        int s_v = s[S_COORD(gIDx, gIDy - 1)] * s[S_COORD(gIDx, gIDy)];
+        if(s_v > 0){
+            float u = avg_u(gIDx, gIDy);
+            float v = v_in[V_COORD(gIDx, gIDy)];
+            float x = (float(gIDx) + 0.5) / float(p.sim_width);
+            float y = float(gIDy) / float(p.sim_height + 1);
+            x = max(min(x - p.deltaTime * u, 1.0), 0.0);
+            y = max(min(y - p.deltaTime * v, 1.0), 0.0);
+            v_out[V_COORD(gIDx, gIDy)] = bilerp_v(x,y);
+        }
+    }
+#else
     uint gIDx = gl_GlobalInvocationID.x;
     uint gIDy = gl_GlobalInvocationID.y;
 
-    if(gIDx >= p.sim_width || gIDy >= p.sim_height){
-        return;
+    if(gIDx < p.width + 1 && gIDy < p.height){
+        u_out[U_COORD(gIDx,gIDy)] = u_in[U_COORD(gIDx,gIDy)];
+        //u_out[U_COORD(gIDx,gIDy)] = 1.0;
     }
-    if(gIDx == 0 || gIDy == 0){
-        u_out[gIDx + p.sim_width * gIDy] = 1.0;
-        v_out[gIDx + p.sim_width * gIDy] = 1.0;
-    } else {
-        u_out[gIDx + p.sim_width * gIDy] = min(u_in[gIDx + p.sim_width * gIDy] + u_in[gIDx + p.sim_width * gIDy - 1] * p.deltaTime / 10.0, 1.0);
-        v_out[gIDx + p.sim_width * gIDy] = min(v_in[gIDx + p.sim_width * gIDy] + v_in[gIDx + p.sim_width * (gIDy - 1)] * p.deltaTime / 10.0, 1.0);
+
+    if(gIDx < p.width && gIDy < p.height + 1){
+        v_out[V_COORD(gIDx,gIDy)] = v_in[V_COORD(gIDx,gIDy)];
+        //v_out[V_COORD(gIDx,gIDy)] = 1.0;
     }
+    
+#endif
 }
