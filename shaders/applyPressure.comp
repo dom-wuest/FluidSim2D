@@ -36,40 +36,42 @@ layout (push_constant) uniform PushConstants
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * p.sim_width
-#define UV_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+#define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+#define V_COORD(i,j) (i) + (j) * p.sim_width
 
 void main(){
 
-    uint gIDx = gl_GlobalInvocationID.x + 1;
-    uint gIDy = gl_GlobalInvocationID.y + 1;
+    uint gIDx;
+    uint gIDy;
 
-    if(gIDx > p.sim_width || gIDy > p.sim_height){
-        return;
+    // u component
+    gIDx = gl_GlobalInvocationID.x + 1;
+    gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx < p.sim_width && gIDy < p.sim_height){
+        int s_l = s[S_COORD(gIDx - 1, gIDy)];
+        int s_r = s[S_COORD(gIDx, gIDy)];
+        int s_u = s_l * s_r;
+        float p_l = pressure[S_COORD(gIDx - 1, gIDy)];
+        float p_r = pressure[S_COORD(gIDx, gIDy)];
+        float u_old = u_in[U_COORD(gIDx, gIDy)];
+        float u_new = u_old - (p_r - p_l) * float(s_u);
+        u_out[U_COORD(gIDx, gIDy)] = u_new;
     }
     
-    // how to handle edge cases?
-    // for now assume zero velocity at edges
-    // TODO: THIS IS OUT OF BOUNDS!
-    int s_l = s[S_COORD(gIDx - 1, gIDy)];
-    int s_r = s[S_COORD(gIDx, gIDy)];
-    int s_t = s[S_COORD(gIDx, gIDy - 1)];
-    int s_b = s[S_COORD(gIDx, gIDy)];
-    
-    int s_u = s_l * s_r;
-    int s_v = s_t * s_b;
+    // v component
+    gIDx = gl_GlobalInvocationID.x;
+    gIDy = gl_GlobalInvocationID.y + 1;
 
-    float p_l = pressure[S_COORD(gIDx - 1, gIDy)];
-    float p_r = pressure[S_COORD(gIDx, gIDy)];
-    float p_t = pressure[S_COORD(gIDx, gIDy - 1)];
-    float p_b = pressure[S_COORD(gIDx, gIDy)];
-
-    float u_old = u_in[UV_COORD(gIDx, gIDy)];
-    float v_old = v_in[UV_COORD(gIDx, gIDy)];
-
-    float u_new = u_old - (p_r - p_l) * float(s_u);
-    float v_new = v_old - (p_b - p_t) * float(s_v);
-
-    u_out[UV_COORD(gIDx, gIDy)] = u_new;
-    v_out[UV_COORD(gIDx, gIDy)] = v_new;
+    if(gIDx < p.sim_width && gIDy < p.sim_height){
+        int s_t = s[S_COORD(gIDx, gIDy - 1)];
+        int s_b = s[S_COORD(gIDx, gIDy)];
+        int s_v = s_t * s_b;
+        float p_t = pressure[S_COORD(gIDx, gIDy - 1)];
+        float p_b = pressure[S_COORD(gIDx, gIDy)];
+        float v_old = v_in[V_COORD(gIDx, gIDy)];
+        float v_new = v_old - (p_b - p_t) * float(s_v);
+        v_out[V_COORD(gIDx, gIDy)] = v_new;
+    }
 
 }

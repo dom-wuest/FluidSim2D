@@ -578,9 +578,9 @@ private:
 		// solid cells
 		std::vector<int> solids(SIM_WIDTH * SIM_HEIGHT);
 		// horizontal velocity
-		std::vector<float> u((SIM_WIDTH + 1) * (SIM_HEIGHT + 1), 0.0f);
+		std::vector<float> u((SIM_WIDTH + 1) * (SIM_HEIGHT), 0.0f);
 		// vertical velocity
-		std::vector<float> v((SIM_WIDTH + 1) * (SIM_HEIGHT + 1), 0.0f);
+		std::vector<float> v((SIM_WIDTH) * (SIM_HEIGHT + 1), 0.0f);
 		// pressure
 		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
 
@@ -594,7 +594,7 @@ private:
 				if (i == 0 || j == 0 || j == SIM_HEIGHT - 1) {
 					s = 0; // solid
 				}
-
+				/*
 				int dx = i - obstacleX;
 				int dy = j - obstacleY;
 
@@ -602,6 +602,20 @@ private:
 					s = 0; // solid
 				}
 
+				solids[i + SIM_WIDTH * j] = s;
+				*/
+				
+				if (i == SIM_WIDTH / 4 && j >= SIM_HEIGHT / 4 && j < 3 * SIM_HEIGHT / 4) {
+					s = 0; // solid
+				}
+				
+				if (i >= SIM_WIDTH / 4 && j == SIM_HEIGHT / 4 && i < 3 * SIM_WIDTH / 4) {
+					s = 0; // solid
+				}
+
+				if (i >= SIM_WIDTH / 4 && j == 3 * SIM_HEIGHT / 4 && i < 3 * SIM_WIDTH / 4) {
+					s = 0; // solid
+				}
 				solids[i + SIM_WIDTH * j] = s;
 			}
 		}
@@ -643,7 +657,7 @@ private:
 			velocityUBuffers.resize(swapChainImages.size());
 			velocityUBuffersMemory.resize(swapChainImages.size());
 
-			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT + 1);
+			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -670,7 +684,7 @@ private:
 			velocityVBuffers.resize(swapChainImages.size());
 			velocityVBuffersMemory.resize(swapChainImages.size());
 
-			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT + 1);
+			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH) * (SIM_HEIGHT + 1);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;

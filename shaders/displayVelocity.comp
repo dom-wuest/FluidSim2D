@@ -29,6 +29,11 @@ layout (push_constant) uniform PushConstants
 
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
+#define S_COORD(i,j) (i) + (j) * p.sim_width
+#define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+#define V_COORD(i,j) (i) + (j) * p.sim_width
+//#define SHOW_PRESSURE
+
 float nearest_p(float x, float y){
     // x,y in [0.0,1.0)
     float x_l = floor(x * float(p.sim_width));
@@ -57,9 +62,9 @@ float nearest_v(float x, float y){
 float bilerp_u(float x, float y){
     // x,y in [0.0,1.0)
     float s = floor(x * (float(p.sim_width)+1.0));
-    float t = floor(y * (float(p.sim_height)+1.0));
+    float t = floor(y * (float(p.sim_height)) - 0.5);
     float dx = x * (float(p.sim_width)+1.0) - s;
-    float dy = y * (float(p.sim_height)+1.0) - t;
+    float dy = y * (float(p.sim_height)) - t - 0.5;
 
     //s = s + 1.0;
     //t = t + 1.0;
@@ -67,7 +72,7 @@ float bilerp_u(float x, float y){
     int s0 = max(int(s), 0);
     int s1 = min(int(s) + 1, int(p.sim_width));
     int t0 = max(int(t), 0);
-    int t1 = min(int(t) + 1, int(p.sim_height));
+    int t1 = min(int(t) + 1, int(p.sim_height) - 1);
 
     float A = float(u[s0 + (p.sim_width+1) * t0]);
     float B = float(u[s1 + (p.sim_width+1) * t0]);
@@ -78,28 +83,27 @@ float bilerp_u(float x, float y){
 
 float bilerp_v(float x, float y){
     // x,y in [0.0,1.0)
-    float s = floor(x * (float(p.sim_width)+1.0));
+    float s = floor(x * (float(p.sim_width)) - 0.5);
     float t = floor(y * (float(p.sim_height)+1.0));
-    float dx = x * (float(p.sim_width)+1.0) - s;
+    float dx = x * (float(p.sim_width)) - s -0.5;
     float dy = y * (float(p.sim_height)+1.0) - t;
 
     //s = s + 1.0;
     //t = t + 1.0;
 
     int s0 = max(int(s), 0);
-    int s1 = min(int(s) + 1, int(p.sim_width));
+    int s1 = min(int(s) + 1, int(p.sim_width) - 1);
     int t0 = max(int(t), 0);
     int t1 = min(int(t) + 1, int(p.sim_height));
 
-    float A = float(v[s0 + (p.sim_width + 1) * t0]);
-    float B = float(v[s1 + (p.sim_width + 1) * t0]);
-    float C = float(v[s0 + (p.sim_width + 1) * t1]);
-    float D = float(v[s1 + (p.sim_width + 1) * t1]);
+    float A = float(v[s0 + (p.sim_width) * t0]);
+    float B = float(v[s1 + (p.sim_width) * t0]);
+    float C = float(v[s0 + (p.sim_width) * t1]);
+    float D = float(v[s1 + (p.sim_width) * t1]);
     return (A * (1.0-dx) + B * dx) * (1.0-dy) + (C * (1.0-dx) + D * dx) * dy;
 }
 
-#define S_COORD(i,j) (i) + (j) * p.sim_width
-//#define SHOW_PRESSURE
+
 
 void main(){
 
@@ -117,13 +121,14 @@ void main(){
     //float v_x = bilerp_v(x,y);
     //vec4 color = vec4(u_x,v_x,0.0,1.0);
 #ifdef SHOW_PRESSURE
-    float press = nearest_p(x, y) * 10.0;
+    float press = nearest_p(x, y) * 20.0;
     vec4 color = vec4(0.0,0.0,press,1.0);
 #else
     float vel_u = bilerp_u(x, y) * 0.5;
-    float vel_v = bilerp_v(x, y) * 0.5;
+    float vel_v = bilerp_v(x, y) * 0.8;
     vec4 color = vec4(vel_u,vel_v,-vel_v,1.0);
 #endif
+
     if(nearest_s(x,y) < 0.5){
         // solid -> white!
         color = vec4(1.0,1.0,1.0,1.0);
