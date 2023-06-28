@@ -47,7 +47,13 @@ find_package(Vulkan REQUIRED)
 set( SOURCE_FILE 
     src/main.cpp
     src/utils.cpp
+    src/scenes.cpp
+    src/scenes/windtunnel.cpp
+    src/scenes/pressurebox.cpp
     include/utils.h
+    include/scenes.h
+    include/scenes/windtunnel.h
+    include/scenes/pressurebox.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
@@ -60,6 +66,7 @@ add_shader(${PROJECT_NAME} shaders/projectPressure.comp)
 add_shader(${PROJECT_NAME} shaders/applyPressure.comp)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
+target_include_directories(${PROJECT_NAME} PUBLIC ./include/scenes)
 target_include_directories(${PROJECT_NAME} PRIVATE ${Vulkan_INCLUDE_DIRS} )
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan glfw glm)
 target_compile_definitions(${PROJECT_NAME} PRIVATE)

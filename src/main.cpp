@@ -15,6 +15,7 @@
 #include <array>
 
 #include "utils.h"
+#include "scenes.h"
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -584,6 +585,8 @@ private:
 		// pressure
 		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
 
+		Scenes::SceneManager::instance().createScene("Windtunnel", SIM_WIDTH, SIM_HEIGHT, solids, u, v);
+		/*
 		unsigned int obstacleX = SIM_WIDTH / 4;
 		unsigned int obstacleY = SIM_HEIGHT / 2;
 		unsigned int obstacleR = SIM_HEIGHT / 6;
@@ -594,7 +597,7 @@ private:
 				if (i == 0 || j == 0 || j == SIM_HEIGHT - 1) {
 					s = 0; // solid
 				}
-				/*
+				
 				int dx = i - obstacleX;
 				int dy = j - obstacleY;
 
@@ -603,7 +606,7 @@ private:
 				}
 
 				solids[i + SIM_WIDTH * j] = s;
-				*/
+				
 				
 				if (i == SIM_WIDTH / 4 && j >= SIM_HEIGHT / 4 && j < 3 * SIM_HEIGHT / 4) {
 					s = 0; // solid
@@ -623,7 +626,7 @@ private:
 		for (int j = 1; j < SIM_HEIGHT-1; j++) {
 			u[1 + (SIM_WIDTH + 1) * j] = 1.0f; // initial velocity
 		}
-
+		*/
 		// copy solids to GPU
 		{
 			solidBuffers.resize(swapChainImages.size());
