@@ -25,7 +25,7 @@ const uint32_t SIM_HEIGHT = 120;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const int PRESSURE_ITERATIONS = 21;
+const int PRESSURE_ITERATIONS = 41;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
