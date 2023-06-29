@@ -19,11 +19,11 @@
 #include "utils.h"
 #include "scenes.h"
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 1200;
+const uint32_t HEIGHT = 800;
 
-const uint32_t SIM_WIDTH = 400;
-const uint32_t SIM_HEIGHT = 300;
+const uint32_t SIM_WIDTH = 1200;
+const uint32_t SIM_HEIGHT = 800;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -247,10 +247,10 @@ private:
 
 	void cleanupSwapChain() {
 
-		vkFreeMemory(device, renderTargetDeviceMemory, nullptr);
-		for (auto imageView : renderTargetImageViews) {
-			vkDestroyImageView(device, imageView, nullptr);
-		}
+		//vkFreeMemory(device, renderTargetDeviceMemory, nullptr);
+		//for (auto imageView : renderTargetImageViews) {
+		//	vkDestroyImageView(device, imageView, nullptr);
+		//}
 		//for (auto image : renderTargetImages) {
 		//    vkDestroyImage(device, image, nullptr);
 		//}
@@ -276,14 +276,22 @@ private:
 			vkDestroyBuffer(device, solidBuffers[i], nullptr);
 			vkFreeMemory(device, solidBuffersMemory[i], nullptr);
 
+			vkDestroyBuffer(device, dyeBuffers[i], nullptr);
+			vkFreeMemory(device, dyeBuffersMemory[i], nullptr);
+
+			vkDestroyBuffer(device, divergenceBuffers[i], nullptr);
+			vkFreeMemory(device, divergenceBuffersMemory[i], nullptr);
+		}
+
+		for (size_t i = 0; i < 2 * MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, velocityUBuffers[i], nullptr);
 			vkFreeMemory(device, velocityUBuffersMemory[i], nullptr);
 
 			vkDestroyBuffer(device, velocityVBuffers[i], nullptr);
 			vkFreeMemory(device, velocityVBuffersMemory[i], nullptr);
 
-			vkDestroyBuffer(device, divergenceBuffers[i], nullptr);
-			vkFreeMemory(device, divergenceBuffersMemory[i], nullptr);
+			vkDestroyBuffer(device, pressureBuffers[i], nullptr);
+			vkFreeMemory(device, pressureBuffersMemory[i], nullptr);
 		}
 
 		cleanupSwapChain();
@@ -291,9 +299,28 @@ private:
 		vkDestroyPipeline(device, advectionShader.pipeline, nullptr);
 		vkDestroyPipelineLayout(device, advectionShader.pipelineLayout, nullptr);
 
+		vkDestroyPipeline(device, divergenceShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, divergenceShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, pressureShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, pressureShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, clearPressureShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, clearPressureShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, applyPressureShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, applyPressureShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, dyeAdvectionShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, dyeAdvectionShader.pipelineLayout, nullptr);
+
 		vkDestroyDescriptorSetLayout(device, displayShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, advectionShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, divergenceShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, applyPressureShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, clearPressureShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, dyeAdvectionShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, pressureShader.descLayout, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -602,8 +629,8 @@ private:
 		// dye
 		std::vector<glm::vec4> dye(SIM_WIDTH * SIM_HEIGHT, glm::vec4(0.0));
 
-		auto scene = Scenes::SceneManager::instance().createScene("Pressurebox");
-		//auto scene = Scenes::SceneManager::instance().createScene("Windtunnel");
+		//auto scene = Scenes::SceneManager::instance().createScene("Pressurebox");
+		auto scene = Scenes::SceneManager::instance().createScene("Windtunnel");
 
 		scene->fillBuffers(SIM_WIDTH, SIM_HEIGHT, solids, u, v, dye);
 		
