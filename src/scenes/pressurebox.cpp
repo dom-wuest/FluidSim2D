@@ -5,7 +5,7 @@ bool PressureBoxSceneBuilder::build(uint32_t width, uint32_t height, std::vector
 	for (unsigned int i = 0; i < width; i++) {
 		for (unsigned int j = 0; j < height; j++) {
 			int s = 1; // fluid
-			if (i == 0 || j == 0 || j == height - 1) {
+			if (i == 0 || j == 0 || j == height - 1 || i == width-1) {
 				s = 0; // solid
 			}
 
@@ -24,7 +24,7 @@ bool PressureBoxSceneBuilder::build(uint32_t width, uint32_t height, std::vector
 		}
 	}
 
-	for (int j = 1; j < height; j++) {
+	for (int j = 1; j < height/2; j++) {
 		u[1 + (width + 1) * j] = 1.0f; // initial velocity
 	}
 	return true;

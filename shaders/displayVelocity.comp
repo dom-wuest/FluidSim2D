@@ -32,7 +32,7 @@ layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 #define S_COORD(i,j) (i) + (j) * p.sim_width
 #define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
 #define V_COORD(i,j) (i) + (j) * p.sim_width
-#define SHOW_PRESSURE
+//#define SHOW_PRESSURE
 
 float nearest_p(float x, float y){
     // x,y in [0.0,1.0)

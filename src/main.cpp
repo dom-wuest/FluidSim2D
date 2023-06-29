@@ -585,7 +585,7 @@ private:
 		// pressure
 		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
 
-		Scenes::SceneManager::instance().createScene("Windtunnel", SIM_WIDTH, SIM_HEIGHT, solids, u, v);
+		Scenes::SceneManager::instance().createScene("Pressurebox" /*"Windtunnel"*/, SIM_WIDTH, SIM_HEIGHT, solids, u, v);
 		
 		// copy solids to GPU
 		{
