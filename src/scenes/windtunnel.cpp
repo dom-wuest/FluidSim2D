@@ -1,6 +1,6 @@
 #include "windtunnel.h"
 
-bool WindTunnelSceneBuilder::build(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
+bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye)
 {
 	unsigned int obstacleX = width / 4;
 	unsigned int obstacleY = height / 2 + 1;
@@ -29,6 +29,10 @@ bool WindTunnelSceneBuilder::build(uint32_t width, uint32_t height, std::vector<
 	for (int j = 1; j < height-1; j++) {
 		u[0 + (width + 1) * j] = .99f; // initial velocity
 		u[1 + (width + 1) * j] = .99f; // initial velocity
+	}
+
+	for (int j = 2 * height / 5; j < 3 * height / 5; j++) {
+		dye[0 + (width)*j] = glm::vec4(0.994, 0.738, 0.167, 1.0); // initial dye color
 	}
 
 	return true;

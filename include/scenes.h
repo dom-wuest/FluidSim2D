@@ -4,13 +4,16 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include <memory>
+
+#include <glm/glm.hpp>
 
 
 
 namespace Scenes {
 	class SceneBuilder {
 	public:
-		virtual bool build(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v) = 0;
+		virtual bool fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye) = 0;
 	};
 
 	typedef std::function<SceneBuilder* ()> AbstractBuilder;
@@ -22,7 +25,7 @@ namespace Scenes {
 			return INSTANCE;
 		}
 		bool reg(std::string name, AbstractBuilder builder);
-		bool createScene(std::string name, uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v);
+		std::unique_ptr<SceneBuilder> createScene(std::string name);
 
 	private:
 		std::map<std::string, AbstractBuilder> scenes;

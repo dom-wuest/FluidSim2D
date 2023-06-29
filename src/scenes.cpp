@@ -6,13 +6,14 @@ bool Scenes::SceneManager::reg(std::string name, Scenes::AbstractBuilder builder
 	return true;
 }
 
-bool Scenes::SceneManager::createScene(std::string name, uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
+std::unique_ptr<Scenes::SceneBuilder> Scenes::SceneManager::createScene(std::string name)
 {
     if (scenes.count(name) <= 0) {
-        return false; // scene does not exist
+         // scene does not exist
+        return std::unique_ptr<SceneBuilder>(nullptr);
     }
     auto scene = scenes.at(name)();
-    bool result = scene->build(width,height,solids,u,v);
-    delete scene;
-    return result;
+    std::unique_ptr<SceneBuilder> ptr;
+    ptr.reset(scene);
+    return ptr;
 }

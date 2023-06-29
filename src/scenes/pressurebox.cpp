@@ -1,6 +1,6 @@
 #include "pressurebox.h"
 
-bool PressureBoxSceneBuilder::build(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
+bool PressureBoxSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye)
 {
 	for (unsigned int i = 0; i < width; i++) {
 		for (unsigned int j = 0; j < height; j++) {
@@ -26,6 +26,14 @@ bool PressureBoxSceneBuilder::build(uint32_t width, uint32_t height, std::vector
 
 	for (int j = 1; j < height/2; j++) {
 		u[1 + (width + 1) * j] = 1.0f; // initial velocity
+	}
+
+	for (int j = height/6; j < 3*height / 10; j++) {
+		dye[0 + (width)*j] = glm::vec4(0.724, 0.197, 0.537, 1.0); // initial dye color
+	}
+
+	for (int j = 3 * height / 10; j < 4 * height / 10; j++) {
+		dye[0 + (width)*j] = glm::vec4(0.327, 0.006, 0.646, 1.0); // initial dye color
 	}
 	return true;
 }

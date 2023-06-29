@@ -58,6 +58,7 @@ set( SOURCE_FILE
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
 
+add_shader(${PROJECT_NAME} shaders/advectDye.comp)
 add_shader(${PROJECT_NAME} shaders/advectVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/calcDivergence.comp)
 add_shader(${PROJECT_NAME} shaders/clear.comp)

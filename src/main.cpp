@@ -14,6 +14,8 @@
 #include <set>
 #include <array>
 
+#include <glm/glm.hpp>
+
 #include "utils.h"
 #include "scenes.h"
 
@@ -25,7 +27,7 @@ const uint32_t SIM_HEIGHT = 120;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const int PRESSURE_ITERATIONS = 41;
+const int PRESSURE_ITERATIONS = 21;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -116,6 +118,7 @@ private:
 
 	Utils::ComputeShader displayShader;
 	Utils::ComputeShader advectionShader;
+	Utils::ComputeShader dyeAdvectionShader;
 	Utils::ComputeShader divergenceShader;
 	Utils::ComputeShader pressureShader;
 	Utils::ComputeShader applyPressureShader;
@@ -139,6 +142,9 @@ private:
 	std::vector<VkBuffer> pressureBuffers;
 	std::vector<VkDeviceMemory> pressureBuffersMemory;
 
+	std::vector<VkBuffer> dyeBuffers;
+	std::vector<VkDeviceMemory> dyeBuffersMemory;
+
 	std::vector<VkSemaphore> imageAvailableSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> inFlightFences;
@@ -153,6 +159,7 @@ private:
 	std::vector<VkDescriptorSet> pressureDescriptorSets;
 	std::vector<VkDescriptorSet> applyPressureDescriptorSets;
 	std::vector<VkDescriptorSet> clearPressureDescriptorSets;
+	std::vector<VkDescriptorSet> dyeAdvectionDescriptorSets;
 
 	VkDescriptorPool descriptorPool;
 
@@ -193,6 +200,9 @@ private:
 		createAdvectionDescriptorSetLayout();
 		createAdvectionPipeline();
 
+		createDyeAdvectionDescriptorSetLayout();
+		createDyeAdvectionPipeline();
+
 		createDivergenceDescriptorSetLayout();
 		createDivergencePipeline();
 
@@ -211,6 +221,7 @@ private:
 		createDescriptorPool();
 		createDisplayDescriptorSets();
 		createAdvectionDescriptorSets();
+		createDyeAdvectionDescriptorSets();
 		createDivergenceDescriptorSets();
 		createPressureDescriptorSets();
 		createClearPressureDescriptorSets();
@@ -558,6 +569,10 @@ private:
 		Utils::createPipeline(device, "advectVelocity.comp", advectionShader, sizeof(PushConstants));
 	}
 
+	void createDyeAdvectionPipeline() {
+		Utils::createPipeline(device, "advectDye.comp", dyeAdvectionShader, sizeof(PushConstants));
+	}
+
 	void createDivergencePipeline() {
 		Utils::createPipeline(device, "calcDivergence.comp", divergenceShader, sizeof(PushConstants));
 	}
@@ -584,8 +599,13 @@ private:
 		std::vector<float> v((SIM_WIDTH) * (SIM_HEIGHT + 1), 0.0f);
 		// pressure
 		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
+		// dye
+		std::vector<glm::vec4> dye(SIM_WIDTH * SIM_HEIGHT, glm::vec4(0.0));
 
-		Scenes::SceneManager::instance().createScene("Pressurebox" /*"Windtunnel"*/, SIM_WIDTH, SIM_HEIGHT, solids, u, v);
+		auto scene = Scenes::SceneManager::instance().createScene("Pressurebox");
+		//auto scene = Scenes::SceneManager::instance().createScene("Windtunnel");
+
+		scene->fillBuffers(SIM_WIDTH, SIM_HEIGHT, solids, u, v, dye);
 		
 		// copy solids to GPU
 		{
@@ -663,6 +683,33 @@ private:
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT * 2; i++) {
 				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, velocityVBuffers[i], velocityVBuffersMemory[i]);
 				Utils::copyBuffer(device, stagingBuffer, velocityVBuffers[i], bufferSize, commandPool, computeQueue);
+			}
+
+			vkDestroyBuffer(device, stagingBuffer, nullptr);
+			vkFreeMemory(device, stagingBufferMemory, nullptr);
+		}
+
+		// copy dye to GPU
+		{
+			dyeBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+			dyeBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+
+			VkDeviceSize bufferSize = sizeof(glm::vec4) * (SIM_WIDTH) * (SIM_HEIGHT);
+
+			VkBuffer stagingBuffer;
+			VkDeviceMemory stagingBufferMemory;
+
+			Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+			void* data;
+			vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+			memcpy(data, dye.data(), (size_t)bufferSize);
+			vkUnmapMemory(device, stagingBufferMemory);
+
+			// Copy initial data to all storage buffers
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, dyeBuffers[i], dyeBuffersMemory[i]);
+				Utils::copyBuffer(device, stagingBuffer, dyeBuffers[i], bufferSize, commandPool, computeQueue);
 			}
 
 			vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -837,6 +884,21 @@ private:
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[currentFrame], 0, nullptr);
 		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+
+		VkMemoryBarrier barrier_dye;
+		barrier_dye.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+		barrier_dye.pNext = NULL;
+		barrier_dye.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		barrier_dye.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier_dye, 0, nullptr, 0, nullptr);
+
+
+		vkCmdPushConstants(commandBuffers[currentFrame], dyeAdvectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
+		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
+		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
 		
 				/*
 		vkCmdPushConstants(commandBuffers[currentFrame], extrapolatePipelineLayoutU, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
@@ -903,6 +965,7 @@ private:
 		Utils::addStorageBuffer(layoutBindings, 2);
 		Utils::addStorageBuffer(layoutBindings, 3);
 		Utils::addStorageBuffer(layoutBindings, 4);
+		Utils::addStorageBuffer(layoutBindings, 5);
 
 		Utils::createDescriptorSetLayout(device, layoutBindings, displayShader.descLayout);
 	}
@@ -916,6 +979,17 @@ private:
 		}
 
 		Utils::createDescriptorSetLayout(device, layoutBindings, advectionShader.descLayout);
+	}
+
+	void createDyeAdvectionDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 5; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
+		}
+
+		Utils::createDescriptorSetLayout(device, layoutBindings, dyeAdvectionShader.descLayout);
 	}
 
 	void createDivergenceDescriptorSetLayout() {
@@ -973,8 +1047,9 @@ private:
 		// projection: 4*2
 		// application: 6
 		// advection: 5
-		// display: 4*SWAP_CHAIN_SIZE
-		const size_t NUM_BUFFERS = 4 + 1 + (4 * 2) + 6 + 5 + (4 * swapChainImages.size());
+		// dye advection: 5
+		// display: 5*SWAP_CHAIN_SIZE
+		const size_t NUM_BUFFERS = 4 + 1 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * NUM_BUFFERS);
 
@@ -982,7 +1057,7 @@ private:
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (6 + swapChainImages.size()));
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (7 + swapChainImages.size()));
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -1014,6 +1089,7 @@ private:
 				Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], displayDescriptorSets[idx], 2);
 				Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], displayDescriptorSets[idx], 3);
 				Utils::bindBuffer(device, pressureBuffers[i], displayDescriptorSets[idx], 4);
+				Utils::bindBuffer(device, dyeBuffers[i], displayDescriptorSets[idx], 5);
 			}
 		}
 	}
@@ -1040,6 +1116,32 @@ private:
 
 			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], advectionDescriptorSets[i], 3);
 			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], advectionDescriptorSets[i], 4);
+		}
+	}
+
+	void createDyeAdvectionDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, dyeAdvectionShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		dyeAdvectionDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+		if (vkAllocateDescriptorSets(device, &allocInfo, dyeAdvectionDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+			Utils::bindBuffer(device, solidBuffers[i], dyeAdvectionDescriptorSets[i], 0);
+
+			Utils::bindBuffer(device, velocityUBuffers[i], dyeAdvectionDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[i], dyeAdvectionDescriptorSets[i], 2);
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
+			Utils::bindBuffer(device, dyeBuffers[i_old], dyeAdvectionDescriptorSets[i], 3);
+			Utils::bindBuffer(device, dyeBuffers[i], dyeAdvectionDescriptorSets[i], 4);
 		}
 	}
 

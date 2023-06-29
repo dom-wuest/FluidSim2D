@@ -1,0 +1,103 @@
+#version 450
+
+layout (binding = 0) buffer SolidsIn {
+    int s[ ];
+};
+
+layout (binding = 1) buffer UIn {
+    float u[ ];
+};
+
+layout (binding = 2) buffer VIn {
+    float v[ ];
+};
+
+layout (binding = 3) buffer DyeIn {
+    vec4 dye_in[ ];
+};
+
+layout (binding = 4) buffer DyeOut {
+    vec4 dye_out[ ];
+};
+
+layout (push_constant) uniform PushConstants
+{
+    uint width;
+    uint height;
+    uint sim_width;
+    uint sim_height;
+    float deltaTime;
+} p;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+#define S_COORD(i,j) (i) + (j) * p.sim_width
+#define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
+#define V_COORD(i,j) (i) + (j) * p.sim_width
+
+#define ADVECT_DYE
+
+float avg_v(uint i, uint j){
+    float A = float(v[V_COORD(i,j)]);
+    float B = float(v[V_COORD(i,j+1)]);
+    return (A + B) * 0.5;
+}
+
+float avg_u(uint i, uint j){
+    float A = float(u[U_COORD(i,j)]);
+    float B = float(u[U_COORD(i+1,j)]);
+    return (A + B) * 0.5;
+}
+
+vec4 bilerp_dye(float x, float y){
+    // x,y in [0.0,1.0)
+    float s = floor(x * float(p.sim_width));
+    float t = floor(y * float(p.sim_height));
+    float dx = x * float(p.sim_width) - s;
+    float dy = y * float(p.sim_height)- t;
+
+    int s0 = max(int(s), 0);
+    int s1 = min(int(s) + 1, int(p.sim_width) - 1);
+    int t0 = max(int(t), 0);
+    int t1 = min(int(t) + 1, int(p.sim_height) - 1);
+
+    vec4 A = dye_in[S_COORD(s0,t0)];
+    vec4 B = dye_in[S_COORD(s1,t0)];
+    vec4 C = dye_in[S_COORD(s0,t1)];
+    vec4 D = dye_in[S_COORD(s1,t1)];
+    return mix(mix(A,B,dx), mix(C,D,dx), dy);
+}
+
+void main(){
+
+#ifdef ADVECT_DYE
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx >= p.sim_width || gIDy >= p.sim_height){
+        return;
+    }
+    if(s[S_COORD(gIDx, gIDy)] == 0){
+        return;
+    }
+
+    float u_vel = avg_u(gIDx,gIDy);
+    float v_vel = avg_v(gIDx,gIDy);
+
+    float x = float(gIDx) / float(p.sim_width);
+    float y = float(gIDy) / float(p.sim_height);
+
+    x = max(min(x - p.deltaTime * u_vel, 1.0), 0.0);
+    y = max(min(y - p.deltaTime * v_vel, 1.0), 0.0);
+
+    dye_out[S_COORD(gIDx,gIDy)] = bilerp_dye(x,y);
+#else
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx < p.sim_width-1 && gIDy < p.sim_height){
+        dye_out[S_COORD(gIDx+1,gIDy)] = dye_in[S_COORD(gIDx,gIDy)];
+    }
+    
+#endif
+}

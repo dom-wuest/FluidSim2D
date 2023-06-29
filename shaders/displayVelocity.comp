@@ -18,6 +18,10 @@ layout (binding = 4) readonly buffer PIn {
     float pressure[];
 };
 
+layout (binding = 5) readonly buffer DyeIn {
+    vec4 dye[];
+};
+
 layout (push_constant) uniform PushConstants
 {
     uint width;
@@ -45,6 +49,12 @@ float nearest_s(float x, float y){
     float x_l = floor(x * float(p.sim_width));
     float y_l = floor(y * float(p.sim_height));
     return float(solids[int(x_l) + p.sim_width * int(y_l)]);
+}
+vec4 nearest_dye(float x, float y){
+    // x,y in [0.0,1.0)
+    float x_l = floor(x * float(p.sim_width));
+    float y_l = floor(y * float(p.sim_height));
+    return dye[int(x_l) + p.sim_width * int(y_l)];
 }
 float nearest_u(float x, float y){
     // x,y in [0.0,1.0)
@@ -114,6 +124,25 @@ vec4 sciColor(float val) {
     return mix(A,B, dx);
 }
 
+vec4 bilerp_dye(float x, float y){
+    // x,y in [0.0,1.0)
+    float s = floor(x * float(p.sim_width)-0.5);
+    float t = floor(y * float(p.sim_height)-0.5);
+    float dx = x * float(p.sim_width) - s - 0.5;
+    float dy = y * float(p.sim_height)- t - 0.5;
+
+    int s0 = max(int(s), 0);
+    int s1 = min(int(s) + 1, int(p.sim_width) - 1);
+    int t0 = max(int(t), 0);
+    int t1 = min(int(t) + 1, int(p.sim_height) - 1);
+
+    vec4 A = dye[S_COORD(s0,t0)];
+    vec4 B = dye[S_COORD(s1,t0)];
+    vec4 C = dye[S_COORD(s0,t1)];
+    vec4 D = dye[S_COORD(s1,t1)];
+    return mix(mix(A,B,dx),mix(C,D,dx),dy);
+}
+
 void main(){
 
     uint gIDx = gl_GlobalInvocationID.x;
@@ -143,5 +172,7 @@ void main(){
         // solid -> white!
         //color = vec4(1.0,1.0,1.0,1.0);
     }
+    color = bilerp_dye(x,y);
+    color.w = 1.0;
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
 }
