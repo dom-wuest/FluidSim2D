@@ -25,6 +25,6 @@ void main(){
     if(gIDx >= p.sim_width || gIDy >= p.sim_height){
         return;
     }
-
-    pressure[S_COORD(gIDx, gIDy)] = 0.0;
+    float press = pressure[S_COORD(gIDx, gIDy)];
+    pressure[S_COORD(gIDx, gIDy)] = press;
 }

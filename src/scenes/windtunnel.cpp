@@ -3,7 +3,7 @@
 bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye)
 {
 	unsigned int obstacleX = width / 4;
-	unsigned int obstacleY = height / 2 + 1;
+	unsigned int obstacleY = height / 2 + 2;
 	unsigned int obstacleR = height / 6;
 
 	for (unsigned int i = 0; i < width; i++) {

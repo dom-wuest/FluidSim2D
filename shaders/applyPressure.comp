@@ -58,7 +58,7 @@ void main(){
         float p_l = pressure[S_COORD(gIDx - 1, gIDy)];
         float p_r = pressure[S_COORD(gIDx, gIDy)];
         float u_old = u_in[U_COORD(gIDx, gIDy)];
-        float u_new = u_old - (p_r - p_l) * float(s_u) * 1.6;
+        float u_new = u_old - (p_r - p_l) * float(s_u);
         u_out[U_COORD(gIDx, gIDy)] = u_new;
     }
     
@@ -73,7 +73,7 @@ void main(){
         float p_t = pressure[S_COORD(gIDx, gIDy - 1)];
         float p_b = pressure[S_COORD(gIDx, gIDy)];
         float v_old = v_in[V_COORD(gIDx, gIDy)];
-        float v_new = v_old - (p_b - p_t) * float(s_v) * 1.6;
+        float v_new = v_old - (p_b - p_t) * float(s_v);
         v_out[V_COORD(gIDx, gIDy)] = v_new;
     }
 #else

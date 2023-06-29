@@ -25,7 +25,7 @@ bool PressureBoxSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::
 	}
 
 	for (int j = 1; j < height/2; j++) {
-		u[1 + (width + 1) * j] = 1.0f; // initial velocity
+		u[1 + (width + 1) * j] = 0.3f; // initial velocity
 	}
 
 	for (int j = height/6; j < 3*height / 10; j++) {

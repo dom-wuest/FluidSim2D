@@ -22,12 +22,12 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-const uint32_t SIM_WIDTH = 160;
-const uint32_t SIM_HEIGHT = 120;
+const uint32_t SIM_WIDTH = 400;
+const uint32_t SIM_HEIGHT = 300;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const int PRESSURE_ITERATIONS = 21;
+const int PRESSURE_ITERATIONS = 41;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -823,7 +823,7 @@ private:
 		pc.sim_width = SIM_WIDTH;
 		pc.sim_height = SIM_HEIGHT;
 		pc.deltaTime = (float)lastFrameTime / 1000.0;
-		//pc.deltaTime = 0.003;
+		//pc.deltaTime = 0.0003;
 
 		vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
