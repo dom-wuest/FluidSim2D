@@ -26,9 +26,9 @@ bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::v
 	}
 
 	
-	for (int j = 1; j < height-1; j++) {
-		u[0 + (width + 1) * j] = .99f; // initial velocity
-		u[1 + (width + 1) * j] = .99f; // initial velocity
+	for (int j = 1; j < height / 2; j++) {
+		u[0 + (width + 1) * j] = 1.0f; // initial velocity
+		u[1 + (width + 1) * j] = 1.0f; // initial velocity
 	}
 
 	for (int j = 2 * height / 5; j < 3 * height / 5; j++) {

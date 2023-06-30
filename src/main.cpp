@@ -22,12 +22,9 @@
 const uint32_t WIDTH = 1200;
 const uint32_t HEIGHT = 800;
 
-const uint32_t SIM_WIDTH = 1200;
-const uint32_t SIM_HEIGHT = 800;
-
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const int PRESSURE_ITERATIONS = 41;
+const int PRESSURE_ITERATIONS = 21;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -88,6 +85,8 @@ struct PushConstants {
 class FluidSimApplication {
 public:
 	void run() {
+		scene = Scenes::SceneManager::instance().createScene("Pressurebox");
+		//scene = Scenes::SceneManager::instance().createScene("Windtunnel");
 		initWindow();
 		initVulkan();
 		mainLoop();
@@ -166,6 +165,8 @@ private:
 	VkSampler imageSampler;
 
 	bool framebufferResized = false;
+	std::unique_ptr<Scenes::SceneBuilder> scene = nullptr;
+	uint32_t sim_resolution = 256;
 
 	void initWindow() {
 		glfwInit();
@@ -217,7 +218,8 @@ private:
 
 		createCommandPool();
 
-		createShaderStorageBuffers();
+		uint32_t sim_width = sim_resolution * WIDTH / HEIGHT;
+		createShaderStorageBuffers(sim_width, sim_resolution);
 		createDescriptorPool();
 		createDisplayDescriptorSets();
 		createAdvectionDescriptorSets();
@@ -270,8 +272,7 @@ private:
 		vkDestroySwapchainKHR(device, swapChain, nullptr);
 	}
 
-	void cleanup() {
-
+	void cleanupStorageBuffers() {
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroyBuffer(device, solidBuffers[i], nullptr);
 			vkFreeMemory(device, solidBuffersMemory[i], nullptr);
@@ -293,6 +294,11 @@ private:
 			vkDestroyBuffer(device, pressureBuffers[i], nullptr);
 			vkFreeMemory(device, pressureBuffersMemory[i], nullptr);
 		}
+	}
+
+	void cleanup() {
+
+		cleanupStorageBuffers();
 
 		cleanupSwapChain();
 
@@ -354,14 +360,29 @@ private:
 
 		vkDeviceWaitIdle(device);
 
+		cleanupStorageBuffers();
+
 		cleanupSwapChain();
 
 		createSwapChain();
 		createImageViews();
+
+		uint32_t sim_width = sim_resolution * width / height;
+
+		createShaderStorageBuffers(sim_width, sim_resolution);
+
 		createDescriptorPool();
-		createDisplayDescriptorSets();
+		
 		createDisplayPipeline();
-		createAdvectionPipeline();
+
+		createDisplayDescriptorSets();
+		createAdvectionDescriptorSets();
+		createDyeAdvectionDescriptorSets();
+		createDivergenceDescriptorSets();
+		createPressureDescriptorSets();
+		createClearPressureDescriptorSets();
+		createApplyPressureDescriptorSets();
+
 		createCommandBuffers();
 
 	}
@@ -616,30 +637,27 @@ private:
 		Utils::createPipeline(device, "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
 	}
 
-	void createShaderStorageBuffers() {
+	void createShaderStorageBuffers(uint32_t sim_width, uint32_t sim_height) {
 		// create scene
 		// solid cells
-		std::vector<int> solids(SIM_WIDTH * SIM_HEIGHT);
+		std::vector<int> solids(sim_width * sim_height);
 		// horizontal velocity
-		std::vector<float> u((SIM_WIDTH + 1) * (SIM_HEIGHT), 0.0f);
+		std::vector<float> u((sim_width + 1) * (sim_height), 0.0f);
 		// vertical velocity
-		std::vector<float> v((SIM_WIDTH) * (SIM_HEIGHT + 1), 0.0f);
+		std::vector<float> v((sim_width) * (sim_height + 1), 0.0f);
 		// pressure
-		std::vector<float> p(SIM_WIDTH * SIM_HEIGHT, 0.0f);
+		std::vector<float> p(sim_width * sim_height, 0.0f);
 		// dye
-		std::vector<glm::vec4> dye(SIM_WIDTH * SIM_HEIGHT, glm::vec4(0.0));
+		std::vector<glm::vec4> dye(sim_width * sim_height, glm::vec4(0.0));
 
-		//auto scene = Scenes::SceneManager::instance().createScene("Pressurebox");
-		auto scene = Scenes::SceneManager::instance().createScene("Windtunnel");
-
-		scene->fillBuffers(SIM_WIDTH, SIM_HEIGHT, solids, u, v, dye);
+		scene->fillBuffers(sim_width, sim_height, solids, u, v, dye);
 		
 		// copy solids to GPU
 		{
 			solidBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 			solidBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
 
-			VkDeviceSize bufferSize = sizeof(int) * SIM_WIDTH * SIM_HEIGHT;
+			VkDeviceSize bufferSize = sizeof(int) * sim_width * sim_height;
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -667,7 +685,7 @@ private:
 			velocityUBuffers.resize(MAX_FRAMES_IN_FLIGHT * 2);
 			velocityUBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT * 2);
 
-			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH + 1) * (SIM_HEIGHT);
+			VkDeviceSize bufferSize = sizeof(float) * (sim_width + 1) * (sim_height);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -694,7 +712,7 @@ private:
 			velocityVBuffers.resize(MAX_FRAMES_IN_FLIGHT * 2);
 			velocityVBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT * 2);
 
-			VkDeviceSize bufferSize = sizeof(float) * (SIM_WIDTH) * (SIM_HEIGHT + 1);
+			VkDeviceSize bufferSize = sizeof(float) * (sim_width) * (sim_height + 1);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -721,7 +739,7 @@ private:
 			dyeBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 			dyeBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
 
-			VkDeviceSize bufferSize = sizeof(glm::vec4) * (SIM_WIDTH) * (SIM_HEIGHT);
+			VkDeviceSize bufferSize = sizeof(glm::vec4) * (sim_width) * (sim_height);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -748,7 +766,7 @@ private:
 			divergenceBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 			divergenceBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
 
-			VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+			VkDeviceSize bufferSize = sizeof(float) * sim_width * sim_height;
 			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, divergenceBuffers[i], divergenceBuffersMemory[i]);
 			}
@@ -759,7 +777,7 @@ private:
 			pressureBuffers.resize(MAX_FRAMES_IN_FLIGHT * 2);
 			pressureBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT * 2);
 
-			VkDeviceSize bufferSize = sizeof(float) * SIM_WIDTH * SIM_HEIGHT;
+			VkDeviceSize bufferSize = sizeof(float) * sim_width * sim_height;
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
 
@@ -844,25 +862,31 @@ private:
 			throw std::runtime_error("failed to begin recording command buffer!");
 		}
 
+		int width = 0, height = 0;
+		glfwGetFramebufferSize(window, &width, &height);
+
+		uint32_t sim_height = sim_resolution;
+		uint32_t sim_width = sim_resolution * width / height;
+
 		PushConstants pc;
-		pc.width = WIDTH;
-		pc.height = HEIGHT;
-		pc.sim_width = SIM_WIDTH;
-		pc.sim_height = SIM_HEIGHT;
-		pc.deltaTime = (float)lastFrameTime / 1000.0;
-		//pc.deltaTime = 0.0003;
+		pc.width = width;
+		pc.height = height;
+		pc.sim_width = sim_width;
+		pc.sim_height = sim_height;
+		//pc.deltaTime = (float)lastFrameTime / 1000.0;
+		pc.deltaTime = 0.0003;
 
 		vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
 		vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
 		for (int i = 0; i < PRESSURE_ITERATIONS; i++) {
 			int pingpong = i % 2;
@@ -879,7 +903,7 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipelineLayout, 0, 1, &pressureDescriptorSets[2 * currentFrame + pingpong], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
 		}
 		
@@ -895,7 +919,7 @@ private:
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipelineLayout, 0, 1, &applyPressureDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
 		VkMemoryBarrier barrier_advect;
 		barrier_advect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -910,7 +934,7 @@ private:
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
 		VkMemoryBarrier barrier_dye;
 		barrier_dye.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -925,20 +949,20 @@ private:
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 31) / 32, (SIM_HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 		
 				/*
 		vkCmdPushConstants(commandBuffers[currentFrame], extrapolatePipelineLayoutU, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineU);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutU, 0, 1, &extrapolateDescriptorSetsU[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_HEIGHT + 63) / 64, 1, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_height + 63) / 64, 1, 1);
 
 		vkCmdPushConstants(commandBuffers[currentFrame], extrapolatePipelineLayoutV, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineV);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutV, 0, 1, &extrapolateDescriptorSetsV[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (SIM_WIDTH + 63) / 64, 1, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 63) / 64, 1, 1);
 		*/
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
@@ -949,7 +973,7 @@ private:
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipelineLayout, 0, 1, &displayDescriptorSets[currentFrame * swapChainImages.size() + imageIdx], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (WIDTH + 31) / 32, (HEIGHT + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
 
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
 			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
