@@ -13,18 +13,16 @@
 #include <optional>
 #include <set>
 #include <array>
+#include <sstream>
 
 #include <glm/glm.hpp>
+
+#include <cxxopts.hpp>
 
 #include "utils.h"
 #include "scenes.h"
 
-const uint32_t WIDTH = 1200;
-const uint32_t HEIGHT = 800;
-
 const int MAX_FRAMES_IN_FLIGHT = 2;
-
-const int PRESSURE_ITERATIONS = 21;
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -84,13 +82,19 @@ struct PushConstants {
 
 class FluidSimApplication {
 public:
-	void run() {
-		scene = Scenes::SceneManager::instance().createScene("Pressurebox");
-		//scene = Scenes::SceneManager::instance().createScene("Windtunnel");
+	bool run(std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter) {
+		scene = Scenes::SceneManager::instance().createScene(scenename);
+		width = w;
+		height = h;
+		sim_resolution = res;
+		pressure_iter = iter / 2;
+		pressure_iter = pressure_iter * 2 + 1;
+
 		initWindow();
 		initVulkan();
 		mainLoop();
 		cleanup();
+		return true;
 	}
 
 private:
@@ -167,13 +171,16 @@ private:
 	bool framebufferResized = false;
 	std::unique_ptr<Scenes::SceneBuilder> scene = nullptr;
 	uint32_t sim_resolution = 256;
+	uint32_t width = 800;
+	uint32_t height = 600;
+	uint32_t pressure_iter = 11;
 
 	void initWindow() {
 		glfwInit();
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Fluid Sim 2D", nullptr, nullptr);
+		window = glfwCreateWindow(width, height, "Fluid Sim 2D", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 
@@ -218,7 +225,7 @@ private:
 
 		createCommandPool();
 
-		uint32_t sim_width = sim_resolution * WIDTH / HEIGHT;
+		uint32_t sim_width = sim_resolution * width / height;
 		createShaderStorageBuffers(sim_width, sim_resolution);
 		createDescriptorPool();
 		createDisplayDescriptorSets();
@@ -888,7 +895,7 @@ private:
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
 		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
-		for (int i = 0; i < PRESSURE_ITERATIONS; i++) {
+		for (int i = 0; i < pressure_iter; i++) {
 			int pingpong = i % 2;
 			VkMemoryBarrier barrier;
 			barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -1547,11 +1554,54 @@ private:
 	}
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+
+	cxxopts::Options options("FluidSimulation2D", "A Vulkan-based 2D fluid simulation");
+
+	auto scenenames = Scenes::SceneManager::instance().availableScenes();
+	std::stringstream ss;
+	for (auto it = scenenames.begin(); it != scenenames.end(); it++) {
+		if (it != scenenames.begin()) {
+			ss << ", ";
+		}
+		ss << *it;
+	}
+
+	options.set_width(100).set_tab_expansion().add_options()
+		("s,scene", "Scene to simulate: [" + ss.str() + "]", cxxopts::value<std::string>()->default_value("Windtunnel"))
+		("i,iter", "Number of iterations for pressure projection", cxxopts::value<int>()->default_value("8"))
+		("w,width", "Width of output window", cxxopts::value<int>()->default_value("1000"))
+		("h,height", "Height of output window", cxxopts::value<int>()->default_value("600"))
+		("r,res", "Resolution of the simulation (vertical)", cxxopts::value<int>()->default_value("512"))
+		("help", "Print usage");
+
+
+	cxxopts::ParseResult result;
+
+	try {
+		result = options.parse(argc, argv);
+	}
+	catch (const cxxopts::exceptions::exception& x) {
+		std::cout << x.what() << std::endl;
+		std::cout << "Use --help for additional information on usage!" << std::endl;
+		exit(1);
+	}
+
+	if (result.count("help")) {
+		std::cout << options.help() << std::endl;
+		exit(0);
+	}
+	
+	std::string scenename = result["scene"].as<std::string>();
+	int iter = result["iter"].as<int>();
+	int width = result["width"].as<int>();
+	int height = result["height"].as<int>();
+	int res = result["res"].as<int>();
+
 	FluidSimApplication app;
 
 	try {
-		app.run();
+		app.run(scenename, width, height, res, iter);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;

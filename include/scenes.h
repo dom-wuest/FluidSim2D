@@ -26,6 +26,7 @@ namespace Scenes {
 		}
 		bool reg(std::string name, AbstractBuilder builder);
 		std::unique_ptr<SceneBuilder> createScene(std::string name);
+		std::vector<std::string> availableScenes();
 
 	private:
 		std::map<std::string, AbstractBuilder> scenes;
