@@ -82,13 +82,14 @@ struct PushConstants {
 
 class FluidSimApplication {
 public:
-	bool run(std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter) {
+	bool run(std::string shaderpath, std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter) {
 		scene = Scenes::SceneManager::instance().createScene(scenename);
 		width = w;
 		height = h;
 		sim_resolution = res;
 		pressure_iter = iter / 2;
 		pressure_iter = pressure_iter * 2 + 1;
+		shaderPath = shaderpath;
 
 		initWindow();
 		initVulkan();
@@ -174,6 +175,8 @@ private:
 	uint32_t width = 800;
 	uint32_t height = 600;
 	uint32_t pressure_iter = 11;
+
+	std::string shaderPath;
 
 	void initWindow() {
 		glfwInit();
@@ -617,31 +620,31 @@ private:
 	}
 
 	void createDisplayPipeline() {
-		Utils::createPipeline(device, "displayVelocity.comp", displayShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "displayVelocity.comp", displayShader, sizeof(PushConstants));
 	}
 
 	void createAdvectionPipeline() {
-		Utils::createPipeline(device, "advectVelocity.comp", advectionShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "advectVelocity.comp", advectionShader, sizeof(PushConstants));
 	}
 
 	void createDyeAdvectionPipeline() {
-		Utils::createPipeline(device, "advectDye.comp", dyeAdvectionShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "advectDye.comp", dyeAdvectionShader, sizeof(PushConstants));
 	}
 
 	void createDivergencePipeline() {
-		Utils::createPipeline(device, "calcDivergence.comp", divergenceShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "calcDivergence.comp", divergenceShader, sizeof(PushConstants));
 	}
 
 	void createPressurePipeline() {
-		Utils::createPipeline(device, "projectPressure.comp", pressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "projectPressure.comp", pressureShader, sizeof(PushConstants));
 	}
 
 	void createClearPressurePipeline() {
-		Utils::createPipeline(device, "clear.comp", clearPressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "clear.comp", clearPressureShader, sizeof(PushConstants));
 	}
 
 	void createApplyPressurePipeline() {
-		Utils::createPipeline(device, "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
 	}
 
 	void createShaderStorageBuffers(uint32_t sim_width, uint32_t sim_height) {
@@ -1554,7 +1557,30 @@ private:
 	}
 };
 
+std::string replace(const std::string& s, const std::string& from, const std::string& to) {
+	std::string r = s;
+	int p = 0;
+	while ((p = (int)r.find(from, p)) != std::string::npos) {
+		r.replace(p, from.length(), to);
+		p += (int)to.length();
+	}
+	return r;
+}
+
 int main(int argc, char* argv[]) {
+
+	// Get the last position of '/'
+	std::string aux(argv[0]);
+	// get '/' or '\\' depending on unix/mac or windows.
+#if defined(_WIN32) || defined(WIN32)
+	int pos = aux.rfind('\\');
+#else
+	int pos = aux.rfind('/');
+#endif
+	// Get the path
+	std::string path = aux.substr(0, pos + 1);
+	path = replace(path, "\\", "/");
+	path = path + "../shaders/";
 
 	cxxopts::Options options("FluidSimulation2D", "A Vulkan-based 2D fluid simulation");
 
@@ -1601,7 +1627,7 @@ int main(int argc, char* argv[]) {
 	FluidSimApplication app;
 
 	try {
-		app.run(scenename, width, height, res, iter);
+		app.run(path, scenename, width, height, res, iter);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;

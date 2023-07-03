@@ -22,7 +22,7 @@ function(add_shader TARGET SHADER)
     find_program(GLSLC glslc)
 
     set(current-shader-path ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER})
-    set(current-output-path ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER}.spv)
+    set(current-output-path ${CMAKE_CURRENT_BINARY_DIR}/${SHADER}.spv)
 
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build)
     get_filename_component(current-output-dir ${current-output-path} DIRECTORY)

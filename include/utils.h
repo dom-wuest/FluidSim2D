@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vector>
 #include <fstream>
+#include <filesystem>
 
 #define CAST(a) static_cast<uint32_t>(a.size())
 
