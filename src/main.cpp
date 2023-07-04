@@ -1686,6 +1686,7 @@ std::string replace(const std::string& s, const std::string& from, const std::st
 	return r;
 }
 
+
 int main(int argc, char* argv[]) {
 
 	// Get the last position of '/'
@@ -1701,7 +1702,15 @@ int main(int argc, char* argv[]) {
 	path = replace(path, "\\", "/");
 	path = path + "../shaders/";
 
-	cxxopts::Options options("FluidSimulation2D", "A Vulkan-based 2D fluid simulation.");
+	cxxopts::Options options("FluidSimulation2D", 
+		"An interactive Vulkan-based fluid simulation in 2D \n"
+		"-------------------------------------------------- \n"
+		"Controls: \n"
+		"  SPACEBAR:        pause / continue simulation \n"
+		"  R:               restart simulation \n"
+		"  LEFT MOUSE BTN:  apply force and dye at cursor \n"
+		"--------------------------------------------------"
+	);
 
 	auto scenenames = Scenes::SceneManager::instance().availableScenes();
 	std::stringstream ss;
