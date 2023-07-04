@@ -107,6 +107,8 @@ void main(){
     if(gIDx >= p.width || gIDy >= p.height){
         return;
     }
+
+    float aspectRatio = float(p.sim_width) / float(p.sim_height);
     //if(s[S_COORD(gIDx, gIDy)] == 0){
     //    return;
     //}
@@ -114,7 +116,7 @@ void main(){
     float x = float(gIDx) / float(p.width);
     float y = float(gIDy) / float(p.height);
 
-    float u_vel = bilerp_u(x,y);
+    float u_vel = bilerp_u(x,y) / aspectRatio;
     float v_vel = bilerp_v(x,y);
 
     x = max(min(x - p.deltaTime * u_vel, 1.0), 0.0);

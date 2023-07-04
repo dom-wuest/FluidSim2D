@@ -109,6 +109,8 @@ void main(){
     int gIDx;
     int gIDy;
 
+    float aspectRatio = float(p.sim_width) / float(p.sim_height);
+
     // u component
     gIDx = int(gl_GlobalInvocationID.x) + 1;
     gIDy = int(gl_GlobalInvocationID.y);
@@ -116,7 +118,7 @@ void main(){
     if(gIDx < p.sim_width && gIDy < p.sim_height){
         int s_u = s[S_COORD(gIDx - 1, gIDy)] * s[S_COORD(gIDx, gIDy)];
         if(s_u > 0){
-            float u = u_in[U_COORD(gIDx, gIDy)];
+            float u = u_in[U_COORD(gIDx, gIDy)] / aspectRatio;
             float v = avg_v(gIDx, gIDy);
             float x = float(gIDx) / float(p.sim_width + 1);
             float y = (float(gIDy) + 0.5) / float(p.sim_height);
@@ -137,7 +139,7 @@ void main(){
     if(gIDx < p.sim_width && gIDy < p.sim_height){
         int s_v = s[S_COORD(gIDx, gIDy - 1)] * s[S_COORD(gIDx, gIDy)];
         if(s_v > 0){
-            float u = avg_u(gIDx, gIDy);
+            float u = avg_u(gIDx, gIDy) / aspectRatio;
             float v = v_in[V_COORD(gIDx, gIDy)];
             float x = (float(gIDx) + 0.5) / float(p.sim_width);
             float y = float(gIDy) / float(p.sim_height + 1);

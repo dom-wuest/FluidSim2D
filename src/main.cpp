@@ -1809,7 +1809,7 @@ int main(int argc, char* argv[]) {
 
 	options.set_width(100).set_tab_expansion().add_options()
 		("s,scene", "Scene to simulate: [" + ss.str() + "]", cxxopts::value<std::string>()->default_value("Windtunnel"))
-		("i,iter", "Number of iterations for pressure projection", cxxopts::value<int>()->default_value("8"))
+		("i,iter", "Number of iterations for pressure projection", cxxopts::value<int>()->default_value("20"))
 		("w,width", "Width of output window", cxxopts::value<int>()->default_value("1000"))
 		("h,height", "Height of output window", cxxopts::value<int>()->default_value("600"))
 		("r,res", "Resolution of the simulation (vertical)", cxxopts::value<int>()->default_value("512"))
