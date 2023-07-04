@@ -127,6 +127,10 @@ public:
 		lastCursorPos = pos;
 	}
 
+	void restart() {
+		framebufferResized = true;
+	}
+
 private:
 	GLFWwindow* window;
 
@@ -239,6 +243,9 @@ private:
 		auto app = reinterpret_cast<FluidSimApplication*>(glfwGetWindowUserPointer(window));
 		if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
 			app->tooglePause();
+		}
+		if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+			app->restart();
 		}
 	}
 
