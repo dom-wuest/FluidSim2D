@@ -92,7 +92,7 @@ struct SplashPushConstants {
 
 class FluidSimApplication {
 public:
-	bool run(std::string shaderpath, std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter) {
+	bool run(std::string shaderpath, std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter, float dt) {
 		scene = Scenes::SceneManager::instance().createScene(scenename);
 		width = w;
 		height = h;
@@ -100,6 +100,7 @@ public:
 		pressure_iter = iter / 2;
 		pressure_iter = pressure_iter * 2 + 1;
 		shaderPath = shaderpath;
+		deltaTime = dt;
 
 		initWindow();
 		initVulkan();
@@ -210,6 +211,7 @@ private:
 	uint32_t width = 800;
 	uint32_t height = 600;
 	uint32_t pressure_iter = 11;
+	float deltaTime = 0.0003;
 
 	std::string shaderPath;
 
@@ -461,6 +463,7 @@ private:
 		createPressureDescriptorSets();
 		createClearPressureDescriptorSets();
 		createApplyPressureDescriptorSets();
+		createApplyForcesDescriptorSets();
 
 		createCommandBuffers();
 
@@ -956,14 +959,14 @@ private:
 		pc.sim_width = sim_width;
 		pc.sim_height = sim_height;
 		//pc.deltaTime = (float)lastFrameTime / 1000.0;
-		pc.deltaTime = 0.0003;
+		pc.deltaTime = deltaTime;
 
 		SplashPushConstants spc;
 		spc.sim_width = sim_width;
 		spc.sim_height = sim_height;
 		spc.color = scene->dyeColor(dyeSplashIdx);
 		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
-		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / 0.0003), 0.0, 0.0);
+		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / deltaTime), 0.0, 0.0);
 		spc.radius = 1.0;
 		spc.s_active = splashActive;
 
@@ -1708,6 +1711,7 @@ int main(int argc, char* argv[]) {
 		("w,width", "Width of output window", cxxopts::value<int>()->default_value("1000"))
 		("h,height", "Height of output window", cxxopts::value<int>()->default_value("600"))
 		("r,res", "Resolution of the simulation (vertical)", cxxopts::value<int>()->default_value("512"))
+		("t,dt", "Time per simulation step [s]", cxxopts::value<float>()->default_value("0.0003"))
 		("help", "Print usage");
 
 
@@ -1732,11 +1736,12 @@ int main(int argc, char* argv[]) {
 	int width = result["width"].as<int>();
 	int height = result["height"].as<int>();
 	int res = result["res"].as<int>();
+	float dt = result["dt"].as<float>();
 
 	FluidSimApplication app;
 
 	try {
-		app.run(path, scenename, width, height, res, iter);
+		app.run(path, scenename, width, height, res, iter, dt);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;
