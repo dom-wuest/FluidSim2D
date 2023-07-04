@@ -98,6 +98,10 @@ public:
 		return true;
 	}
 
+	void tooglePause() {
+		paused = !paused;
+	}
+
 private:
 	GLFWwindow* window;
 
@@ -156,6 +160,7 @@ private:
 	size_t currentFrame = 0;
 	float lastFrameTime = 0.0f;
 	double lastTime = 0.0;
+	bool paused = false;
 
 	std::vector<VkDescriptorSet> displayDescriptorSets;
 	std::vector<VkDescriptorSet> advectionDescriptorSets;
@@ -186,6 +191,7 @@ private:
 		window = glfwCreateWindow(width, height, "Fluid Sim 2D", nullptr, nullptr);
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+		glfwSetKeyCallback(window, keyInputCallback);
 
 		lastTime = glfwGetTime();
 	}
@@ -193,6 +199,13 @@ private:
 	static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
 		auto app = reinterpret_cast<FluidSimApplication*>(glfwGetWindowUserPointer(window));
 		app->framebufferResized = true;
+	}
+
+	static void keyInputCallback(GLFWwindow* window,int key, int scancode, int action, int mods) {
+		auto app = reinterpret_cast<FluidSimApplication*>(glfwGetWindowUserPointer(window));
+		if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+			app->tooglePause();
+		}
 	}
 
 	void initVulkan() {
@@ -886,94 +899,83 @@ private:
 		//pc.deltaTime = (float)lastFrameTime / 1000.0;
 		pc.deltaTime = 0.0003;
 
-		vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+		if (!paused) {
+			vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
-
-		vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
-
-		for (int i = 0; i < pressure_iter; i++) {
-			int pingpong = i % 2;
-			VkMemoryBarrier barrier;
-			barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-			barrier.pNext = NULL;
-			barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			
-
-			vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier, 0, nullptr, 0, nullptr);
-
-			vkCmdPushConstants(commandBuffers[currentFrame], pressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipeline);
-			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipelineLayout, 0, 1, &pressureDescriptorSets[2 * currentFrame + pingpong], 0, nullptr);
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 
+			vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
+			for (int i = 0; i < pressure_iter; i++) {
+				int pingpong = i % 2;
+				VkMemoryBarrier barrier;
+				barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+				barrier.pNext = NULL;
+				barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+
+				vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier, 0, nullptr, 0, nullptr);
+
+				vkCmdPushConstants(commandBuffers[currentFrame], pressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+				vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipeline);
+				vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipelineLayout, 0, 1, &pressureDescriptorSets[2 * currentFrame + pingpong], 0, nullptr);
+				vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
+			}
+
+			VkMemoryBarrier barrier2;
+			barrier2.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			barrier2.pNext = NULL;
+			barrier2.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier2, 0, nullptr, 0, nullptr);
+
+			vkCmdPushConstants(commandBuffers[currentFrame], applyPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipelineLayout, 0, 1, &applyPressureDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
+			VkMemoryBarrier barrier_advect;
+			barrier_advect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			barrier_advect.pNext = NULL;
+			barrier_advect.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			barrier_advect.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier_advect, 0, nullptr, 0, nullptr);
+
+
+			vkCmdPushConstants(commandBuffers[currentFrame], advectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
+			VkMemoryBarrier barrier_dye;
+			barrier_dye.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			barrier_dye.pNext = NULL;
+			barrier_dye.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			barrier_dye.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier_dye, 0, nullptr, 0, nullptr);
+
+
+			vkCmdPushConstants(commandBuffers[currentFrame], dyeAdvectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
 		}
 		
-		VkMemoryBarrier barrier2;
-		barrier2.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-		barrier2.pNext = NULL;
-		barrier2.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		barrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-		vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier2, 0, nullptr, 0, nullptr);
-
-		vkCmdPushConstants(commandBuffers[currentFrame], applyPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipeline);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipelineLayout, 0, 1, &applyPressureDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
-
-		VkMemoryBarrier barrier_advect;
-		barrier_advect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-		barrier_advect.pNext = NULL;
-		barrier_advect.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		barrier_advect.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-		vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier_advect, 0, nullptr, 0, nullptr);
-
-		
-		vkCmdPushConstants(commandBuffers[currentFrame], advectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
-
-		VkMemoryBarrier barrier_dye;
-		barrier_dye.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-		barrier_dye.pNext = NULL;
-		barrier_dye.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		barrier_dye.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-		vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &barrier_dye, 0, nullptr, 0, nullptr);
-
-
-		vkCmdPushConstants(commandBuffers[currentFrame], dyeAdvectionShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
-		
-				/*
-		vkCmdPushConstants(commandBuffers[currentFrame], extrapolatePipelineLayoutU, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineU);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutU, 0, 1, &extrapolateDescriptorSetsU[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_height + 63) / 64, 1, 1);
-
-		vkCmdPushConstants(commandBuffers[currentFrame], extrapolatePipelineLayoutV, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineV);
-		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, extrapolatePipelineLayoutV, 0, 1, &extrapolateDescriptorSetsV[currentFrame], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 63) / 64, 1, 1);
-		*/
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL,
 			VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
@@ -1347,7 +1349,6 @@ private:
 		//vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 		recordCommandBuffer(currentFrame, imageIndex);
 
-
 		if (vkQueueSubmit(computeQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw command buffer!");
 		}
@@ -1582,7 +1583,7 @@ int main(int argc, char* argv[]) {
 	path = replace(path, "\\", "/");
 	path = path + "../shaders/";
 
-	cxxopts::Options options("FluidSimulation2D", "A Vulkan-based 2D fluid simulation");
+	cxxopts::Options options("FluidSimulation2D", "A Vulkan-based 2D fluid simulation.");
 
 	auto scenenames = Scenes::SceneManager::instance().availableScenes();
 	std::stringstream ss;
