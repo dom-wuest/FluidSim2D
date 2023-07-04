@@ -1,0 +1,74 @@
+#version 450
+
+layout (binding = 0) buffer SolidsIn {
+    int s[ ];
+};
+
+layout (binding = 1) buffer UIn {
+    float u_in[ ];
+};
+
+layout (binding = 2) buffer VIn {
+    float v_in[ ];
+};
+
+layout (binding = 3) buffer DyeIn {
+    vec4 dye_in[ ];
+};
+
+layout (binding = 4) buffer UOut {
+    float u_out[ ];
+};
+
+layout (binding = 5) buffer VOut {
+    float v_out[ ];
+};
+
+layout (binding = 6) buffer DyeOut {
+    vec4 dye_out[ ];
+};
+
+layout (push_constant) uniform SplashPushConstants
+{
+    uint sim_width;
+    uint sim_height;
+    uint s_active;
+    float radius;
+    vec4 pos;
+    vec4 dir;
+    vec4 color;
+} splash;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+#define S_COORD(i,j) (i) + (j) * splash.sim_width
+#define U_COORD(i,j) (i) + (j) * (splash.sim_width + 1)
+#define V_COORD(i,j) (i) + (j) * splash.sim_width
+
+void main(){
+
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    vec2 d = vec2(float(gIDx),float(gIDy)) - splash.pos.xy * vec2(float(splash.sim_width), float(splash.sim_height));
+
+    if(gIDx < splash.sim_width + 1 && gIDy < splash.sim_height){
+        vec2 d_u = d + vec2(0.0, 0.5);
+        float strength = exp(-dot(d_u,d_u) / splash.radius) * float(splash.s_active);
+        u_out[U_COORD(gIDx,gIDy)] = u_in[U_COORD(gIDx,gIDy)] + strength * splash.dir.x;
+    }
+
+    if(gIDx < splash.sim_width && gIDy < splash.sim_height + 1){
+        vec2 d_v = d + vec2(0.5, 0.0);
+        float strength = exp(-dot(d_v,d_v) / splash.radius) * float(splash.s_active);
+        v_out[V_COORD(gIDx,gIDy)] = v_in[V_COORD(gIDx,gIDy)] + strength * splash.dir.y;
+    }
+
+    if(gIDx < splash.sim_width && gIDy < splash.sim_height){
+        float strength = exp(-dot(d,d) / splash.radius) * float(splash.s_active);
+        vec4 c = dye_in[S_COORD(gIDx,gIDy)];
+        c = c + strength * splash.color;
+        c.w = 1.0;
+        dye_out[S_COORD(gIDx,gIDy)] = c;
+    }
+}

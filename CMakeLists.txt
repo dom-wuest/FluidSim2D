@@ -50,10 +50,12 @@ set( SOURCE_FILE
     src/scenes.cpp
     src/scenes/windtunnel.cpp
     src/scenes/pressurebox.cpp
+    src/scenes/paint.cpp
     include/utils.h
     include/scenes.h
     include/scenes/windtunnel.h
     include/scenes/pressurebox.h
+    include/scenes/paint.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILE})
@@ -65,6 +67,7 @@ add_shader(${PROJECT_NAME} shaders/clear.comp)
 add_shader(${PROJECT_NAME} shaders/displayVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/projectPressure.comp)
 add_shader(${PROJECT_NAME} shaders/applyPressure.comp)
+add_shader(${PROJECT_NAME} shaders/applyForces.comp)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
 target_include_directories(${PROJECT_NAME} PUBLIC ./include/scenes)

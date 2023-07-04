@@ -78,6 +78,16 @@ struct PushConstants {
 	float deltaTime;
 };
 
+struct SplashPushConstants {
+	unsigned int sim_width;
+	unsigned int sim_height;
+	unsigned int s_active;
+	float radius;
+	glm::vec4 pos;
+	glm::vec4 dir;
+	glm::vec4 color;
+};
+
 
 
 class FluidSimApplication {
@@ -100,6 +110,19 @@ public:
 
 	void tooglePause() {
 		paused = !paused;
+	}
+
+	void activateSplash() {
+		splashActive = true;
+	}
+
+	void deactivateSplash() {
+		splashActive = false;
+	}
+
+	void updateMousePos(glm::vec2 pos) {
+		cursorVelocity = pos - lastCursorPos; // /last frame time?
+		lastCursorPos = pos;
 	}
 
 private:
@@ -131,6 +154,7 @@ private:
 	Utils::ComputeShader pressureShader;
 	Utils::ComputeShader applyPressureShader;
 	Utils::ComputeShader clearPressureShader;
+	Utils::ComputeShader applyForcesShader;
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -161,6 +185,9 @@ private:
 	float lastFrameTime = 0.0f;
 	double lastTime = 0.0;
 	bool paused = false;
+	glm::vec2 lastCursorPos = glm::vec2(0.0);
+	glm::vec2 cursorVelocity = glm::vec2(0.0);
+	bool splashActive = false;
 
 	std::vector<VkDescriptorSet> displayDescriptorSets;
 	std::vector<VkDescriptorSet> advectionDescriptorSets;
@@ -169,6 +196,7 @@ private:
 	std::vector<VkDescriptorSet> applyPressureDescriptorSets;
 	std::vector<VkDescriptorSet> clearPressureDescriptorSets;
 	std::vector<VkDescriptorSet> dyeAdvectionDescriptorSets;
+	std::vector<VkDescriptorSet> applyForcesDescriptorSets;
 
 	VkDescriptorPool descriptorPool;
 
@@ -192,6 +220,8 @@ private:
 		glfwSetWindowUserPointer(window, this);
 		glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
 		glfwSetKeyCallback(window, keyInputCallback);
+		glfwSetCursorPosCallback(window, mouseMovedCallback);
+		glfwSetMouseButtonCallback(window, mouseInputCallback);
 
 		lastTime = glfwGetTime();
 	}
@@ -206,6 +236,22 @@ private:
 		if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
 			app->tooglePause();
 		}
+	}
+
+	static void mouseInputCallback(GLFWwindow* window, int button, int action, int mods) {
+		auto app = reinterpret_cast<FluidSimApplication*>(glfwGetWindowUserPointer(window));
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+			app->activateSplash();
+		}
+
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+			app->deactivateSplash();
+		}
+	}
+
+	static void mouseMovedCallback(GLFWwindow* window, double posx, double posy) {
+		auto app = reinterpret_cast<FluidSimApplication*>(glfwGetWindowUserPointer(window));
+		app->updateMousePos(glm::vec2(posx, posy));
 	}
 
 	void initVulkan() {
@@ -239,6 +285,9 @@ private:
 		createApplyPressureDescriptorSetLayout();
 		createApplyPressurePipeline();
 
+		createApplyForcesDescriptorSetLayout();
+		createApplyForcesPipeline();
+
 		createCommandPool();
 
 		uint32_t sim_width = sim_resolution * width / height;
@@ -251,6 +300,7 @@ private:
 		createPressureDescriptorSets();
 		createClearPressureDescriptorSets();
 		createApplyPressureDescriptorSets();
+		createApplyForcesDescriptorSets();
 
 		createCommandBuffers();
 
@@ -660,6 +710,10 @@ private:
 		Utils::createPipeline(device, shaderPath + "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
 	}
 
+	void createApplyForcesPipeline() {
+		Utils::createPipeline(device, shaderPath + "applyForces.comp", applyForcesShader, sizeof(SplashPushConstants));
+	}
+
 	void createShaderStorageBuffers(uint32_t sim_width, uint32_t sim_height) {
 		// create scene
 		// solid cells
@@ -759,8 +813,8 @@ private:
 
 		// copy dye to GPU
 		{
-			dyeBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-			dyeBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+			dyeBuffers.resize(MAX_FRAMES_IN_FLIGHT*2);
+			dyeBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT*2);
 
 			VkDeviceSize bufferSize = sizeof(glm::vec4) * (sim_width) * (sim_height);
 
@@ -775,7 +829,7 @@ private:
 			vkUnmapMemory(device, stagingBufferMemory);
 
 			// Copy initial data to all storage buffers
-			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT*2; i++) {
 				Utils::createBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, dyeBuffers[i], dyeBuffersMemory[i]);
 				Utils::copyBuffer(device, stagingBuffer, dyeBuffers[i], bufferSize, commandPool, computeQueue);
 			}
@@ -887,7 +941,6 @@ private:
 
 		int width = 0, height = 0;
 		glfwGetFramebufferSize(window, &width, &height);
-
 		uint32_t sim_height = sim_resolution;
 		uint32_t sim_width = sim_resolution * width / height;
 
@@ -899,7 +952,22 @@ private:
 		//pc.deltaTime = (float)lastFrameTime / 1000.0;
 		pc.deltaTime = 0.0003;
 
+		SplashPushConstants spc;
+		spc.sim_width = sim_width;
+		spc.sim_height = sim_height;
+		spc.color = glm::vec4(0.4,0.0,0.0,1.0);
+		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
+		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / 0.0003), 0.0, 0.0);
+		spc.radius = 1.0;
+		spc.s_active = splashActive;
+
 		if (!paused) {
+			vkCmdPushConstants(commandBuffers[currentFrame], applyForcesShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplashPushConstants), &spc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipelineLayout, 0, 1, &applyForcesDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
 			vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
@@ -1099,6 +1167,17 @@ private:
 		Utils::createDescriptorSetLayout(device, layoutBindings, applyPressureShader.descLayout);
 	}
 
+	void createApplyForcesDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 7; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
+		}
+
+		Utils::createDescriptorSetLayout(device, layoutBindings, applyForcesShader.descLayout);
+	}
+
 	void createDescriptorPool() {
 
 		std::array<VkDescriptorPoolSize, 2> poolSizes{};
@@ -1107,12 +1186,13 @@ private:
 
 		// divergence: 4
 		// clear: 1
+		// forces: 7
 		// projection: 4*2
 		// application: 6
 		// advection: 5
 		// dye advection: 5
 		// display: 5*SWAP_CHAIN_SIZE
-		const size_t NUM_BUFFERS = 4 + 1 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
+		const size_t NUM_BUFFERS = 4 + 1 + 7 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * NUM_BUFFERS);
 
@@ -1120,7 +1200,7 @@ private:
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (7 + swapChainImages.size()));
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (8 + swapChainImages.size()));
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -1152,7 +1232,7 @@ private:
 				Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], displayDescriptorSets[idx], 2);
 				Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], displayDescriptorSets[idx], 3);
 				Utils::bindBuffer(device, pressureBuffers[i], displayDescriptorSets[idx], 4);
-				Utils::bindBuffer(device, dyeBuffers[i], displayDescriptorSets[idx], 5);
+				Utils::bindBuffer(device, dyeBuffers[MAX_FRAMES_IN_FLIGHT + i], displayDescriptorSets[idx], 5);
 			}
 		}
 	}
@@ -1199,12 +1279,10 @@ private:
 
 			Utils::bindBuffer(device, solidBuffers[i], dyeAdvectionDescriptorSets[i], 0);
 
-			Utils::bindBuffer(device, velocityUBuffers[i], dyeAdvectionDescriptorSets[i], 1);
-			Utils::bindBuffer(device, velocityVBuffers[i], dyeAdvectionDescriptorSets[i], 2);
-			// i_old is index of previous frame
-			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
-			Utils::bindBuffer(device, dyeBuffers[i_old], dyeAdvectionDescriptorSets[i], 3);
-			Utils::bindBuffer(device, dyeBuffers[i], dyeAdvectionDescriptorSets[i], 4);
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], dyeAdvectionDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], dyeAdvectionDescriptorSets[i], 2);
+			Utils::bindBuffer(device, dyeBuffers[i], dyeAdvectionDescriptorSets[i], 3);
+			Utils::bindBuffer(device, dyeBuffers[MAX_FRAMES_IN_FLIGHT + i], dyeAdvectionDescriptorSets[i], 4);
 		}
 	}
 
@@ -1224,11 +1302,8 @@ private:
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 
 			Utils::bindBuffer(device, solidBuffers[i], divergenceDescriptorSets[i], 0);
-
-			// i_old is index of previous frame
-			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
-			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i_old], divergenceDescriptorSets[i], 1);
-			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i_old], divergenceDescriptorSets[i], 2);
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], divergenceDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], divergenceDescriptorSets[i], 2);
 
 			Utils::bindBuffer(device, divergenceBuffers[i], divergenceDescriptorSets[i], 3);
 		}
@@ -1299,13 +1374,40 @@ private:
 
 			Utils::bindBuffer(device, pressureBuffers[i], applyPressureDescriptorSets[i], 1);
 
-			// i_old is index of previous frame
-			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
-			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyPressureDescriptorSets[i], 2);
-			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyPressureDescriptorSets[i], 3);
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], applyPressureDescriptorSets[i], 2);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], applyPressureDescriptorSets[i], 3);
 
 			Utils::bindBuffer(device, velocityUBuffers[i], applyPressureDescriptorSets[i], 4);
 			Utils::bindBuffer(device, velocityVBuffers[i], applyPressureDescriptorSets[i], 5);
+		}
+	}
+
+	void createApplyForcesDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, applyForcesShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		applyForcesDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+		if (vkAllocateDescriptorSets(device, &allocInfo, applyForcesDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+			Utils::bindBuffer(device, solidBuffers[i], applyForcesDescriptorSets[i], 0);
+
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 1);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 2);
+			Utils::bindBuffer(device, dyeBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 3);
+
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 4);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 5);
+			Utils::bindBuffer(device, dyeBuffers[i], applyForcesDescriptorSets[i], 6);
 		}
 	}
 
