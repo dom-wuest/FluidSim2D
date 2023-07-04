@@ -27,7 +27,7 @@ cmake --build . --config=Release
 
 The simulation can be configured using a command line interface. By default the Windtunnel scene is simulated. If you run the `FluidSimulation2D.exe` without any arguments, the result should look like this:
 
-![windtunnel scene](./images/windtunnel-reference.png)
+![windtunnel scene](./images/windtunnel.png)
  
 You can change the scene and simulation settings by passing additional arguments when starting the application. For example you can run the Pressurebox scene at a resolution of 512 and in a window of 1200x800 pixels use:
 ```sh
