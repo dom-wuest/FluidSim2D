@@ -157,6 +157,60 @@ namespace Utils {
         vkCreateSampler(device, &samplerInfo, nullptr, &imageSampler);
     }
 
+    glm::vec4 hsv2rgb(glm::vec4 hsv)
+    {
+        // CODE FOR THIS FUNCTION PROVIDED BY David H. 
+        // at https://stackoverflow.com/questions/3018313/algorithm-to-convert-rgb-to-hsv-and-hsv-to-rgb-in-range-0-255-for-both
+        double      hh, p, q, t, ff;
+        long        i;
+        glm::vec4   rgb(hsv.a);
+
+        hh = hsv.r;
+        if (hh >= 360.0) hh = 0.0;
+        hh /= 60.0;
+        i = (long)hh;
+        ff = hh - i;
+        p = hsv.b * (1.0 - hsv.g);
+        q = hsv.b * (1.0 - (hsv.g * ff));
+        t = hsv.b * (1.0 - (hsv.g * (1.0 - ff)));
+
+        switch (i) {
+        case 0:
+            rgb.r = hsv.b;
+            rgb.g = t;
+            rgb.b = p;
+            break;
+        case 1:
+            rgb.r = q;
+            rgb.g = hsv.b;
+            rgb.b = p;
+            break;
+        case 2:
+            rgb.r = p;
+            rgb.g = hsv.b;
+            rgb.b = t;
+            break;
+
+        case 3:
+            rgb.r = p;
+            rgb.g = q;
+            rgb.b = hsv.b;
+            break;
+        case 4:
+            rgb.r = t;
+            rgb.g = p;
+            rgb.b = hsv.b;
+            break;
+        case 5:
+        default:
+            rgb.r = hsv.b;
+            rgb.g = p;
+            rgb.b = q;
+            break;
+        }
+        return rgb;
+    }
+
     void addStorageBuffer(std::vector<VkDescriptorSetLayoutBinding>& bindings, uint32_t binding)
     {
         VkDescriptorSetLayoutBinding layoutBinding{};

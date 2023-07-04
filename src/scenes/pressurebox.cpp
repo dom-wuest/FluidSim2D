@@ -38,3 +38,8 @@ bool PressureBoxSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::
 	}
 	return true;
 }
+
+glm::vec4 PressureBoxSceneBuilder::dyeColor(uint32_t frameIdx)
+{
+	return glm::vec4(0.3,0.3,0.3,1.0);
+}

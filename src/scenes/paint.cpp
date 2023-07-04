@@ -16,3 +16,10 @@ bool PaintSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::vector
 
 	return true;
 }
+
+glm::vec4 PaintSceneBuilder::dyeColor(uint32_t frameIdx)
+{
+	float hue = float((32 + 117 * frameIdx) % 360);
+	glm::vec4 hsv(hue, 1.0, 1.0, 1.0);
+	return Utils::hsv2rgb(hsv);
+}

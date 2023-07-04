@@ -118,6 +118,7 @@ public:
 
 	void deactivateSplash() {
 		splashActive = false;
+		dyeSplashIdx++;
 	}
 
 	void updateMousePos(glm::vec2 pos) {
@@ -188,6 +189,7 @@ private:
 	glm::vec2 lastCursorPos = glm::vec2(0.0);
 	glm::vec2 cursorVelocity = glm::vec2(0.0);
 	bool splashActive = false;
+	uint32_t dyeSplashIdx = 0;
 
 	std::vector<VkDescriptorSet> displayDescriptorSets;
 	std::vector<VkDescriptorSet> advectionDescriptorSets;
@@ -350,9 +352,6 @@ private:
 			vkDestroyBuffer(device, solidBuffers[i], nullptr);
 			vkFreeMemory(device, solidBuffersMemory[i], nullptr);
 
-			vkDestroyBuffer(device, dyeBuffers[i], nullptr);
-			vkFreeMemory(device, dyeBuffersMemory[i], nullptr);
-
 			vkDestroyBuffer(device, divergenceBuffers[i], nullptr);
 			vkFreeMemory(device, divergenceBuffersMemory[i], nullptr);
 		}
@@ -366,6 +365,9 @@ private:
 
 			vkDestroyBuffer(device, pressureBuffers[i], nullptr);
 			vkFreeMemory(device, pressureBuffersMemory[i], nullptr);
+
+			vkDestroyBuffer(device, dyeBuffers[i], nullptr);
+			vkFreeMemory(device, dyeBuffersMemory[i], nullptr);
 		}
 	}
 
@@ -393,6 +395,9 @@ private:
 		vkDestroyPipeline(device, dyeAdvectionShader.pipeline, nullptr);
 		vkDestroyPipelineLayout(device, dyeAdvectionShader.pipelineLayout, nullptr);
 
+		vkDestroyPipeline(device, applyForcesShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, applyForcesShader.pipelineLayout, nullptr);
+
 		vkDestroyDescriptorSetLayout(device, displayShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, advectionShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, divergenceShader.descLayout, nullptr);
@@ -400,6 +405,7 @@ private:
 		vkDestroyDescriptorSetLayout(device, clearPressureShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, dyeAdvectionShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, pressureShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, applyForcesShader.descLayout, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -955,7 +961,7 @@ private:
 		SplashPushConstants spc;
 		spc.sim_width = sim_width;
 		spc.sim_height = sim_height;
-		spc.color = glm::vec4(0.4,0.0,0.0,1.0);
+		spc.color = scene->dyeColor(dyeSplashIdx);
 		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
 		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / 0.0003), 0.0, 0.0);
 		spc.radius = 1.0;

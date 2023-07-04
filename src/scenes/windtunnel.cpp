@@ -37,3 +37,8 @@ bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::v
 
 	return true;
 }
+
+glm::vec4 WindTunnelSceneBuilder::dyeColor(uint32_t frameIdx)
+{
+	return glm::vec4(0.4,0.0,0.0,1.0);
+}

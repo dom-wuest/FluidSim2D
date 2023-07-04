@@ -4,6 +4,7 @@
 #include <vector>
 #include <fstream>
 #include <filesystem>
+#include <glm/glm.hpp>
 
 #define CAST(a) static_cast<uint32_t>(a.size())
 
@@ -26,4 +27,5 @@ namespace Utils {
 	void bindBuffer(VkDevice& device, VkBuffer& buffer, VkDescriptorSet& set, uint32_t binding);
 	void bindImage(VkDevice& device, VkImageView& imageView, VkSampler& imageSampler, VkDescriptorSet& set, uint32_t binding);
 	void createImageSampler(VkDevice& device, VkSampler& imageSampler);
+	glm::vec4 hsv2rgb(glm::vec4 hsv);
 }
