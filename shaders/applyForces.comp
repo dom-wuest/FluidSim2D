@@ -53,19 +53,25 @@ void main(){
     vec2 d = vec2(float(gIDx),float(gIDy)) - splash.pos.xy * vec2(float(splash.sim_width), float(splash.sim_height));
 
     if(gIDx < splash.sim_width + 1 && gIDy < splash.sim_height){
+        uint x_l = max(0, gIDx - 1);
+        uint x_r = min(gIDx, splash.sim_width - 1);
+        int fluid = s[S_COORD(x_l,gIDy)] * s[S_COORD(x_r,gIDy)];
         vec2 d_u = d + vec2(0.0, 0.5);
-        float strength = exp(-dot(d_u,d_u) / splash.radius) * float(splash.s_active);
+        float strength = exp(-dot(d_u,d_u) / splash.radius) * float(splash.s_active) * float(fluid);
         u_out[U_COORD(gIDx,gIDy)] = u_in[U_COORD(gIDx,gIDy)] + strength * splash.dir.x;
     }
 
     if(gIDx < splash.sim_width && gIDy < splash.sim_height + 1){
+        uint y_t = max(0, gIDy - 1);
+        uint y_b = min(gIDy, splash.sim_height - 1);
+        int fluid = s[S_COORD(gIDx,y_t)] * s[S_COORD(gIDx,y_b)];
         vec2 d_v = d + vec2(0.5, 0.0);
-        float strength = exp(-dot(d_v,d_v) / splash.radius) * float(splash.s_active);
+        float strength = exp(-dot(d_v,d_v) / splash.radius) * float(splash.s_active) * float(fluid);
         v_out[V_COORD(gIDx,gIDy)] = v_in[V_COORD(gIDx,gIDy)] + strength * splash.dir.y;
     }
 
     if(gIDx < splash.sim_width && gIDy < splash.sim_height){
-        float strength = exp(-dot(d,d) / splash.radius) * float(splash.s_active);
+        float strength = exp(-dot(d,d) / splash.radius) * float(splash.s_active) * s[S_COORD(gIDx,gIDy)];
         vec4 c = dye_in[S_COORD(gIDx,gIDy)];
         c = c + strength * splash.color;
         c.w = 1.0;
