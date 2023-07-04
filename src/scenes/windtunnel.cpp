@@ -1,15 +1,15 @@
 #include "windtunnel.h"
 
-bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye)
+bool WindTunnelSceneBuilder::fillSimulationBuffers(std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
 {
-	unsigned int obstacleX = height / 4;
-	unsigned int obstacleY = height / 2 + 2;
-	unsigned int obstacleR = height / 6;
+	unsigned int obstacleX = sim_height / 4;
+	unsigned int obstacleY = sim_height / 2 + 2;
+	unsigned int obstacleR = sim_height / 6;
 
-	for (unsigned int i = 0; i < width; i++) {
-		for (unsigned int j = 0; j < height; j++) {
+	for (unsigned int i = 0; i < sim_width; i++) {
+		for (unsigned int j = 0; j < sim_height; j++) {
 			int s = 1; // fluid
-			if (i == 0 || j == 0 || j == height - 1) {
+			if (i == 0 || j == 0 || j == sim_height - 1) {
 				s = 0; // solid
 			}
 
@@ -20,17 +20,21 @@ bool WindTunnelSceneBuilder::fillBuffers(uint32_t width, uint32_t height, std::v
 				s = 0; // solid
 			}
 
-			solids[i + width * j] = s;
+			solids[i + sim_width * j] = s;
 
 		}
 	}
 
-	
-	for (int j = 1; j < height-1; j++) {
-		u[0 + (width + 1) * j] = 1.0f; // initial velocity
-		u[1 + (width + 1) * j] = 1.0f; // initial velocity
+	for (int j = 1; j < sim_height - 1; j++) {
+		u[0 + (sim_width + 1) * j] = 1.0f; // initial velocity
+		u[1 + (sim_width + 1) * j] = 1.0f; // initial velocity
 	}
 
+	return true;
+}
+
+bool WindTunnelSceneBuilder::fillDisplayBuffers(std::vector<glm::vec4>& dye)
+{
 	for (int j = 2 * height / 5; j < 3 * height / 5; j++) {
 		dye[0 + (width)*j] = glm::vec4(0.994, 0.738, 0.167, 1.0); // initial dye color
 	}

@@ -1,0 +1,45 @@
+#version 450
+
+layout (binding = 0) buffer SolidsIn {
+    int s[ ];
+};
+
+layout (binding = 1) buffer DyeIn {
+    vec4 dye_in[ ];
+};
+
+layout (binding = 2) buffer DyeOut {
+    vec4 dye_out[ ];
+};
+
+layout (push_constant) uniform DyeSplashPushConstants
+{
+    uint width;
+    uint height;
+    uint s_active;
+    float radius;
+    vec4 pos;
+    vec4 color;
+} splash;
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+#define D_COORD(i,j) (i) + (j) * splash.width
+
+void main(){
+
+    uint gIDx = gl_GlobalInvocationID.x;
+    uint gIDy = gl_GlobalInvocationID.y;
+
+    if(gIDx >= splash.width || gIDy >= splash.height){
+        return;
+    }
+
+    vec2 d = vec2(float(gIDx),float(gIDy)) - splash.pos.xy * vec2(float(splash.width), float(splash.height));
+
+    float strength = exp(-dot(d,d) / splash.radius) * float(splash.s_active);
+    vec4 c = dye_in[D_COORD(gIDx,gIDy)];
+    c = c + strength * splash.color;
+    c.w = 1.0;
+    dye_out[D_COORD(gIDx,gIDy)] = c;
+}

@@ -85,6 +85,14 @@ struct SplashPushConstants {
 	float radius;
 	glm::vec4 pos;
 	glm::vec4 dir;
+};
+
+struct DyeSplashPushConstants {
+	unsigned int width;
+	unsigned int height;
+	unsigned int s_active;
+	float radius;
+	glm::vec4 pos;
 	glm::vec4 color;
 };
 
@@ -161,6 +169,7 @@ private:
 	Utils::ComputeShader applyPressureShader;
 	Utils::ComputeShader clearPressureShader;
 	Utils::ComputeShader applyForcesShader;
+	Utils::ComputeShader addDyeShader;
 
 	VkCommandPool commandPool;
 	std::vector<VkCommandBuffer> commandBuffers;
@@ -204,6 +213,7 @@ private:
 	std::vector<VkDescriptorSet> clearPressureDescriptorSets;
 	std::vector<VkDescriptorSet> dyeAdvectionDescriptorSets;
 	std::vector<VkDescriptorSet> applyForcesDescriptorSets;
+	std::vector<VkDescriptorSet> addDyeDescriptorSets;
 
 	VkDescriptorPool descriptorPool;
 
@@ -299,6 +309,9 @@ private:
 		createApplyForcesDescriptorSetLayout();
 		createApplyForcesPipeline();
 
+		createAddDyeDescriptorSetLayout();
+		createAddDyePipeline();
+
 		createCommandPool();
 
 		uint32_t sim_width = sim_resolution * width / height;
@@ -312,6 +325,7 @@ private:
 		createClearPressureDescriptorSets();
 		createApplyPressureDescriptorSets();
 		createApplyForcesDescriptorSets();
+		createAddDyeDescriptorSets();
 
 		createCommandBuffers();
 
@@ -348,6 +362,12 @@ private:
 
 		vkDestroyPipeline(device, displayShader.pipeline, nullptr);
 		vkDestroyPipelineLayout(device, displayShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, dyeAdvectionShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, dyeAdvectionShader.pipelineLayout, nullptr);
+
+		vkDestroyPipeline(device, addDyeShader.pipeline, nullptr);
+		vkDestroyPipelineLayout(device, addDyeShader.pipelineLayout, nullptr);
 
 		for (auto imageView : swapChainImageViews) {
 			vkDestroyImageView(device, imageView, nullptr);
@@ -401,9 +421,6 @@ private:
 		vkDestroyPipeline(device, applyPressureShader.pipeline, nullptr);
 		vkDestroyPipelineLayout(device, applyPressureShader.pipelineLayout, nullptr);
 
-		vkDestroyPipeline(device, dyeAdvectionShader.pipeline, nullptr);
-		vkDestroyPipelineLayout(device, dyeAdvectionShader.pipelineLayout, nullptr);
-
 		vkDestroyPipeline(device, applyForcesShader.pipeline, nullptr);
 		vkDestroyPipelineLayout(device, applyForcesShader.pipelineLayout, nullptr);
 
@@ -415,6 +432,7 @@ private:
 		vkDestroyDescriptorSetLayout(device, dyeAdvectionShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, pressureShader.descLayout, nullptr);
 		vkDestroyDescriptorSetLayout(device, applyForcesShader.descLayout, nullptr);
+		vkDestroyDescriptorSetLayout(device, addDyeShader.descLayout, nullptr);
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 			vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
@@ -445,6 +463,8 @@ private:
 			glfwGetFramebufferSize(window, &width, &height);
 			glfwWaitEvents();
 		}
+		this->width = width;
+		this->height = height;
 
 		vkDeviceWaitIdle(device);
 
@@ -462,6 +482,8 @@ private:
 		createDescriptorPool();
 		
 		createDisplayPipeline();
+		createAddDyePipeline();
+		createDyeAdvectionPipeline();
 
 		createDisplayDescriptorSets();
 		createAdvectionDescriptorSets();
@@ -471,6 +493,7 @@ private:
 		createClearPressureDescriptorSets();
 		createApplyPressureDescriptorSets();
 		createApplyForcesDescriptorSets();
+		createAddDyeDescriptorSets();
 
 		createCommandBuffers();
 
@@ -730,6 +753,10 @@ private:
 		Utils::createPipeline(device, shaderPath + "applyForces.comp", applyForcesShader, sizeof(SplashPushConstants));
 	}
 
+	void createAddDyePipeline() {
+		Utils::createPipeline(device, shaderPath + "addDye.comp", addDyeShader, sizeof(DyeSplashPushConstants));
+	}
+
 	void createShaderStorageBuffers(uint32_t sim_width, uint32_t sim_height) {
 		// create scene
 		// solid cells
@@ -741,9 +768,12 @@ private:
 		// pressure
 		std::vector<float> p(sim_width * sim_height, 0.0f);
 		// dye
-		std::vector<glm::vec4> dye(sim_width * sim_height, glm::vec4(0.0));
+		std::vector<glm::vec4> dye(width * height, glm::vec4(0.0));
 
-		scene->fillBuffers(sim_width, sim_height, solids, u, v, dye);
+		scene->setDisplaySize(width, height);
+		scene->setSimulationSize(sim_width, sim_height);
+		scene->fillSimulationBuffers(solids, u, v);
+		scene->fillDisplayBuffers(dye);
 		
 		// copy solids to GPU
 		{
@@ -832,7 +862,7 @@ private:
 			dyeBuffers.resize(MAX_FRAMES_IN_FLIGHT*2);
 			dyeBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT*2);
 
-			VkDeviceSize bufferSize = sizeof(glm::vec4) * (sim_width) * (sim_height);
+			VkDeviceSize bufferSize = sizeof(glm::vec4) * (width) * (height);
 
 			VkBuffer stagingBuffer;
 			VkDeviceMemory stagingBufferMemory;
@@ -971,11 +1001,18 @@ private:
 		SplashPushConstants spc;
 		spc.sim_width = sim_width;
 		spc.sim_height = sim_height;
-		spc.color = scene->dyeColor(dyeSplashIdx);
 		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
 		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / deltaTime), 0.0, 0.0);
 		spc.radius = 1.0;
 		spc.s_active = splashActive;
+
+		DyeSplashPushConstants dspc;
+		dspc.width = width;
+		dspc.height = height;
+		dspc.color = scene->dyeColor(dyeSplashIdx);
+		dspc.pos = spc.pos;
+		dspc.radius = spc.radius;
+		dspc.s_active = splashActive;
 
 		if (!paused) {
 			vkCmdPushConstants(commandBuffers[currentFrame], applyForcesShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplashPushConstants), &spc);
@@ -983,6 +1020,20 @@ private:
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipelineLayout, 0, 1, &applyForcesDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+
+			vkCmdPushConstants(commandBuffers[currentFrame], addDyeShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DyeSplashPushConstants), &dspc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, addDyeShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, addDyeShader.pipelineLayout, 0, 1, &addDyeDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
+
+			VkMemoryBarrier forces_barrier;
+			forces_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			forces_barrier.pNext = NULL;
+			forces_barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			forces_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			vkCmdPipelineBarrier(commandBuffers[currentFrame], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VkDependencyFlags(), 1, &forces_barrier, 0, nullptr, 0, nullptr);
 
 			vkCmdPushConstants(commandBuffers[currentFrame], divergenceShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
@@ -1057,7 +1108,7 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
 		}
 		
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
@@ -1187,11 +1238,22 @@ private:
 
 		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 
-		for (int i = 0; i < 7; i++) {
+		for (int i = 0; i < 5; i++) {
 			Utils::addStorageBuffer(layoutBindings, i);
 		}
 
 		Utils::createDescriptorSetLayout(device, layoutBindings, applyForcesShader.descLayout);
+	}
+
+	void createAddDyeDescriptorSetLayout() {
+
+		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
+
+		for (int i = 0; i < 3; i++) {
+			Utils::addStorageBuffer(layoutBindings, i);
+		}
+
+		Utils::createDescriptorSetLayout(device, layoutBindings, addDyeShader.descLayout);
 	}
 
 	void createDescriptorPool() {
@@ -1202,13 +1264,14 @@ private:
 
 		// divergence: 4
 		// clear: 1
-		// forces: 7
+		// forces: 5
+		// add dye: 3
 		// projection: 4*2
 		// application: 6
 		// advection: 5
 		// dye advection: 5
 		// display: 5*SWAP_CHAIN_SIZE
-		const size_t NUM_BUFFERS = 4 + 1 + 7 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
+		const size_t NUM_BUFFERS = 4 + 1 + 5 + 3 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * NUM_BUFFERS);
 
@@ -1216,7 +1279,7 @@ private:
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (8 + swapChainImages.size()));
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (9 + swapChainImages.size()));
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -1419,11 +1482,34 @@ private:
 			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
 			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 1);
 			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 2);
-			Utils::bindBuffer(device, dyeBuffers[MAX_FRAMES_IN_FLIGHT + i_old], applyForcesDescriptorSets[i], 3);
 
-			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 4);
-			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 5);
-			Utils::bindBuffer(device, dyeBuffers[i], applyForcesDescriptorSets[i], 6);
+			Utils::bindBuffer(device, velocityUBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 3);
+			Utils::bindBuffer(device, velocityVBuffers[MAX_FRAMES_IN_FLIGHT + i], applyForcesDescriptorSets[i], 4);
+		}
+	}
+
+	void createAddDyeDescriptorSets() {
+		std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, addDyeShader.descLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		allocInfo.pSetLayouts = layouts.data();
+
+		addDyeDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+		if (vkAllocateDescriptorSets(device, &allocInfo, addDyeDescriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+
+			Utils::bindBuffer(device, solidBuffers[i], addDyeDescriptorSets[i], 0);
+
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
+			Utils::bindBuffer(device, dyeBuffers[MAX_FRAMES_IN_FLIGHT + i_old], addDyeDescriptorSets[i], 1);
+
+			Utils::bindBuffer(device, dyeBuffers[i], addDyeDescriptorSets[i], 2);
 		}
 	}
 

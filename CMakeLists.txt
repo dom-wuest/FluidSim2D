@@ -68,6 +68,7 @@ add_shader(${PROJECT_NAME} shaders/displayVelocity.comp)
 add_shader(${PROJECT_NAME} shaders/projectPressure.comp)
 add_shader(${PROJECT_NAME} shaders/applyPressure.comp)
 add_shader(${PROJECT_NAME} shaders/applyForces.comp)
+add_shader(${PROJECT_NAME} shaders/addDye.comp)
 
 target_include_directories(${PROJECT_NAME} PUBLIC ./include)
 target_include_directories(${PROJECT_NAME} PUBLIC ./include/scenes)

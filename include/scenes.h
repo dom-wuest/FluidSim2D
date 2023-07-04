@@ -12,8 +12,17 @@
 
 namespace Scenes {
 	class SceneBuilder {
+	protected:
+		uint32_t width;
+		uint32_t height;
+		uint32_t sim_width;
+		uint32_t sim_height;
+
 	public:
-		virtual bool fillBuffers(uint32_t width, uint32_t height, std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v, std::vector<glm::vec4>& dye) = 0;
+		void setSimulationSize(uint32_t width, uint32_t height);
+		void setDisplaySize(uint32_t width, uint32_t height);
+		virtual bool fillSimulationBuffers(std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v) = 0;
+		virtual bool fillDisplayBuffers(std::vector<glm::vec4>& dye) = 0;
 		virtual glm::vec4 dyeColor(uint32_t frameIdx) = 0;
 	};
 

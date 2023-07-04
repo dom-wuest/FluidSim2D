@@ -27,3 +27,15 @@ std::vector<std::string> Scenes::SceneManager::availableScenes()
     }
     return names;
 }
+
+void Scenes::SceneBuilder::setSimulationSize(uint32_t width, uint32_t height)
+{
+    sim_width = width;
+    sim_height = height;
+}
+
+void Scenes::SceneBuilder::setDisplaySize(uint32_t width, uint32_t height)
+{
+    this->width = width;
+    this->height = height;
+}

@@ -34,6 +34,7 @@ layout (push_constant) uniform PushConstants
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * p.sim_width
+#define D_COORD(i,j) (i) + (j) * p.width
 #define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
 #define V_COORD(i,j) (i) + (j) * p.sim_width
 #define SHOW_PRESSURE
@@ -126,20 +127,20 @@ vec4 sciColor(float val) {
 
 vec4 bilerp_dye(float x, float y){
     // x,y in [0.0,1.0)
-    float s = floor(x * float(p.sim_width)-0.5);
-    float t = floor(y * float(p.sim_height)-0.5);
-    float dx = x * float(p.sim_width) - s - 0.5;
-    float dy = y * float(p.sim_height)- t - 0.5;
+    float s = floor(x * float(p.width)-0.5);
+    float t = floor(y * float(p.height)-0.5);
+    float dx = x * float(p.width) - s - 0.5;
+    float dy = y * float(p.height)- t - 0.5;
 
     int s0 = max(int(s), 0);
-    int s1 = min(int(s) + 1, int(p.sim_width) - 1);
+    int s1 = min(int(s) + 1, int(p.width) - 1);
     int t0 = max(int(t), 0);
-    int t1 = min(int(t) + 1, int(p.sim_height) - 1);
+    int t1 = min(int(t) + 1, int(p.height) - 1);
 
-    vec4 A = dye[S_COORD(s0,t0)];
-    vec4 B = dye[S_COORD(s1,t0)];
-    vec4 C = dye[S_COORD(s0,t1)];
-    vec4 D = dye[S_COORD(s1,t1)];
+    vec4 A = dye[D_COORD(s0,t0)];
+    vec4 B = dye[D_COORD(s1,t0)];
+    vec4 C = dye[D_COORD(s0,t1)];
+    vec4 D = dye[D_COORD(s1,t1)];
     return mix(mix(A,B,dx),mix(C,D,dx),dy);
 }
 
@@ -171,7 +172,8 @@ void main(){
         // solid -> white!
         //color = vec4(1.0,1.0,1.0,1.0);
     }
-    color = bilerp_dye(x,y);
-    color.w = 1.0;
+    //color = bilerp_dye(x,y);
+    //color.w = 1.0;
+    color = dye[D_COORD(gIDx,gIDy)];
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
 }
