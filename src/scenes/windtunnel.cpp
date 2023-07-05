@@ -2,7 +2,7 @@
 
 bool WindTunnelSceneBuilder::fillSimulationBuffers(std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v)
 {
-	unsigned int obstacleX = sim_height / 3;
+	unsigned int obstacleX = sim_height / 4;
 	unsigned int obstacleY = sim_height / 2;
 	unsigned int obstacleR = sim_height / 7;
 
