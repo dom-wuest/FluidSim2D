@@ -24,8 +24,8 @@
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
-const glm::ivec2 workgroupSizeSim = glm::ivec2(32, 32);
-const glm::ivec2 workgroupSizeDisplay = glm::ivec2(32, 32);
+const glm::ivec2 workgroupSizeSim = glm::ivec2(48, 16);
+const glm::ivec2 workgroupSizeDisplay = glm::ivec2(48, 16);
 
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
@@ -204,10 +204,12 @@ private:
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> inFlightFences;
 	std::vector<VkFence> imagesInFlight;
+
 	size_t currentFrame = 0;
 	float lastFrameTime = 0.0f;
 	double lastTime = 0.0;
 	bool paused = false;
+
 	glm::vec2 lastCursorPos = glm::vec2(0.0);
 	glm::vec2 cursorVelocity = glm::vec2(0.0);
 	bool splashActive = false;
@@ -234,6 +236,9 @@ private:
 	uint32_t height = 600;
 	uint32_t pressure_iter = 11;
 	float deltaTime = 0.0003;
+
+	double avgFrameTime = 0.0;
+	size_t numFrames = 0;
 
 	std::string shaderPath;
 
@@ -344,6 +349,9 @@ private:
 	}
 
 	void mainLoop() {
+		std::cout << "Workgroupsize Simulation: " << workgroupSizeSim.x << "x" << workgroupSizeSim.y << std::endl;
+		std::cout << "Workgroupsize Display:    " << workgroupSizeDisplay.x << "x" << workgroupSizeDisplay.y << std::endl;
+		
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
 			drawFrame();
@@ -351,6 +359,16 @@ private:
 			double currentTime = glfwGetTime();
 			lastFrameTime = (currentTime - lastTime) * 1000.0;
 			lastTime = currentTime;
+
+			numFrames++;
+			avgFrameTime += (double(lastFrameTime) - avgFrameTime) / numFrames;
+
+			if (numFrames % 1000 == 0) {
+				std::cout << "\33[2K\r";
+				std::cout << "Frametime AVG [ms]:       " << std::setprecision(3) << avgFrameTime;
+				numFrames = 0;
+				avgFrameTime = 0.0;
+			}
 		}
 
 		vkDeviceWaitIdle(device);
