@@ -21,7 +21,7 @@ namespace Utils {
 	void addStorageBuffer(std::vector<VkDescriptorSetLayoutBinding>& bindings, uint32_t binding);
 	VkShaderModule createShaderModule(VkDevice& device, const std::vector<char>& code);
 	static std::vector<char> readFile(const std::string& filename);
-	void createPipeline(VkDevice& device, const std::string& shaderFile, ComputeShader& computeShader, uint32_t pushConstantSize = 0);
+	void createPipeline(VkDevice& device, const std::string& shaderFile, ComputeShader& computeShader, uint32_t pushConstantSize = 0, glm::ivec2 workgroupsize=glm::ivec2(32));
 	void addStorageImage(std::vector<VkDescriptorSetLayoutBinding>& bindings, uint32_t binding, VkSampler *sampler);
 	void createDescriptorSetLayout(VkDevice& device, std::vector<VkDescriptorSetLayoutBinding>& bindings, VkDescriptorSetLayout& layout);
 	void bindBuffer(VkDevice& device, VkBuffer& buffer, VkDescriptorSet& set, uint32_t binding);

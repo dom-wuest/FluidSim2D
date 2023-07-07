@@ -25,7 +25,8 @@ layout (push_constant) uniform PushConstants
     float deltaTime;
 } p;
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout( local_size_x_id = 0) in;
+layout( local_size_y_id = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * p.sim_width
 #define U_COORD(i,j) (i) + (j) * (p.sim_width + 1)
@@ -33,31 +34,39 @@ layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 
 void main(){
 
-    uint gIDx = gl_GlobalInvocationID.x;
-    uint gIDy = gl_GlobalInvocationID.y;
+    int gIDx = int(gl_GlobalInvocationID.x);
+    int gIDy = int(gl_GlobalInvocationID.y);
 
-    if(gIDx >= p.sim_width || gIDy >= p.sim_height){
+    if(gIDx >= int(p.sim_width) || gIDy >= int(p.sim_height)){
         return;
     }
 
-    if(s[S_COORD(gIDx, gIDy)] == 0){
+    int s_c = s[S_COORD(gIDx, gIDy)];
+
+    int id_l = max(0, gIDx-1);
+    int id_r = min(int(p.sim_width)-1, gIDx+1);
+    int id_t = max(0, gIDy-1);
+    int id_b = min(int(p.sim_height)-1, gIDy+1);
+
+    int s_l = s[S_COORD(id_l, gIDy)];
+    int s_r = s[S_COORD(id_r, gIDy)];
+    int s_t = s[S_COORD(gIDx, id_t)];
+    int s_b = s[S_COORD(gIDx, id_b)];
+
+    float u_l = u[U_COORD(gIDx, gIDy)];
+    float u_r = u[U_COORD(gIDx + 1, gIDy)];
+    float v_t = v[V_COORD(gIDx, gIDy)];
+    float v_b = v[V_COORD(gIDx, gIDy + 1)];
+
+    if(s_c == 0){
         return;
     }
 
-    int s_l = gIDx > 0 ? s[S_COORD(gIDx - 1, gIDy)] : 0;
-    int s_r = gIDx < (p.sim_width - 1) ? s[S_COORD(gIDx + 1, gIDy)] : 0;
-    int s_t = gIDy > 0 ? s[S_COORD(gIDx, gIDy - 1)] : 0;
-    int s_b = gIDy < (p.sim_height - 1) ? s[S_COORD(gIDx, gIDy + 1)] : 0;
     int s_sum = s_l + s_r + s_t + s_b;
 
     if(s_sum == 0) {
         return;
     }
-    
-    float u_l = u[U_COORD(gIDx, gIDy)];
-    float u_r = u[U_COORD(gIDx + 1, gIDy)];
-    float v_t = v[V_COORD(gIDx, gIDy)];
-    float v_b = v[V_COORD(gIDx, gIDy + 1)];
 
     float div = u_r - u_l + v_b - v_t;
     divergence[S_COORD(gIDx, gIDy)] = div * 0.5;

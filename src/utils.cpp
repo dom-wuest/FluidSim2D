@@ -255,16 +255,29 @@ namespace Utils {
         return buffer;
     }
 
-    void createPipeline(VkDevice& device, const std::string& shaderFile, ComputeShader& computeShader, uint32_t pushConstantSize) {
+    void createPipeline(VkDevice& device, const std::string& shaderFile, ComputeShader& computeShader, uint32_t pushConstantSize, glm::ivec2 workgroupSize) {
         
         auto shader = readFile(shaderFile + ".spv");
         VkShaderModule shaderModule = createShaderModule(device, shader);
+
+        // create the specialization entries for a 2D array (constantID, offset, sizeof(type))
+        std::array<VkSpecializationMapEntry, 2> specEntries = std::array<VkSpecializationMapEntry, 2>{
+            VkSpecializationMapEntry{ 0U, 0U, sizeof(int) },
+                VkSpecializationMapEntry{ 1U, sizeof(int), sizeof(int) }
+        };
+        std::array<int, 2> specValues = { int(workgroupSize.x), int(workgroupSize.y) };
+        VkSpecializationInfo specInfo;
+        specInfo.mapEntryCount = CAST(specEntries);
+        specInfo.pMapEntries = specEntries.data();
+        specInfo.dataSize = CAST(specValues) * sizeof(int) * 2;
+        specInfo.pData = specValues.data();
 
         VkPipelineShaderStageCreateInfo shaderStageInfo{};
         shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         shaderStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
         shaderStageInfo.module = shaderModule;
         shaderStageInfo.pName = "main";
+        shaderStageInfo.pSpecializationInfo = &specInfo;
 
         VkPushConstantRange pcr{};
         pcr.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;

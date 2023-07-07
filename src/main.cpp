@@ -24,6 +24,9 @@
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
+const glm::ivec2 workgroupSizeSim = glm::ivec2(32, 32);
+const glm::ivec2 workgroupSizeDisplay = glm::ivec2(32, 32);
+
 const std::vector<const char*> validationLayers = {
 	"VK_LAYER_KHRONOS_validation"
 };
@@ -109,6 +112,11 @@ public:
 		pressure_iter = pressure_iter * 2 + 1;
 		shaderPath = shaderpath;
 		deltaTime = dt;
+
+		uint32_t sim_width = sim_resolution * width / height;
+
+		workgroupCountSim = (glm::ivec2(sim_width, sim_resolution) + workgroupSizeSim - glm::ivec2(1)) / workgroupSizeSim;
+		workgroupCountDisplay = (glm::ivec2(width, height) + workgroupSizeDisplay - glm::ivec2(1)) / workgroupSizeDisplay;
 
 		initWindow();
 		initVulkan();
@@ -228,6 +236,9 @@ private:
 	float deltaTime = 0.0003;
 
 	std::string shaderPath;
+
+	glm::ivec2 workgroupCountSim;
+	glm::ivec2 workgroupCountDisplay;
 
 	void initWindow() {
 		glfwInit();
@@ -722,39 +733,39 @@ private:
 	}
 
 	void createDisplayPipeline() {
-		Utils::createPipeline(device, shaderPath + "displayVelocity.comp", displayShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "displayVelocity.comp", displayShader, sizeof(PushConstants), workgroupSizeDisplay);
 	}
 
 	void createAdvectionPipeline() {
-		Utils::createPipeline(device, shaderPath + "advectVelocity.comp", advectionShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "advectVelocity.comp", advectionShader, sizeof(PushConstants), workgroupSizeSim);
 	}
 
 	void createDyeAdvectionPipeline() {
-		Utils::createPipeline(device, shaderPath + "advectDye.comp", dyeAdvectionShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "advectDye.comp", dyeAdvectionShader, sizeof(PushConstants), workgroupSizeDisplay);
 	}
 
 	void createDivergencePipeline() {
-		Utils::createPipeline(device, shaderPath + "calcDivergence.comp", divergenceShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "calcDivergence.comp", divergenceShader, sizeof(PushConstants), workgroupSizeSim);
 	}
 
 	void createPressurePipeline() {
-		Utils::createPipeline(device, shaderPath + "projectPressure.comp", pressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "projectPressure.comp", pressureShader, sizeof(PushConstants), workgroupSizeSim);
 	}
 
 	void createClearPressurePipeline() {
-		Utils::createPipeline(device, shaderPath + "clear.comp", clearPressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "clear.comp", clearPressureShader, sizeof(PushConstants), workgroupSizeSim);
 	}
 
 	void createApplyPressurePipeline() {
-		Utils::createPipeline(device, shaderPath + "applyPressure.comp", applyPressureShader, sizeof(PushConstants));
+		Utils::createPipeline(device, shaderPath + "applyPressure.comp", applyPressureShader, sizeof(PushConstants), workgroupSizeSim);
 	}
 
 	void createApplyForcesPipeline() {
-		Utils::createPipeline(device, shaderPath + "applyForces.comp", applyForcesShader, sizeof(SplashPushConstants));
+		Utils::createPipeline(device, shaderPath + "applyForces.comp", applyForcesShader, sizeof(SplashPushConstants), workgroupSizeSim);
 	}
 
 	void createAddDyePipeline() {
-		Utils::createPipeline(device, shaderPath + "addDye.comp", addDyeShader, sizeof(DyeSplashPushConstants));
+		Utils::createPipeline(device, shaderPath + "addDye.comp", addDyeShader, sizeof(DyeSplashPushConstants), workgroupSizeDisplay);
 	}
 
 	void createShaderStorageBuffers(uint32_t sim_width, uint32_t sim_height) {
@@ -1015,17 +1026,18 @@ private:
 		dspc.s_active = splashActive;
 
 		if (!paused) {
+
 			vkCmdPushConstants(commandBuffers[currentFrame], applyForcesShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplashPushConstants), &spc);
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipelineLayout, 0, 1, &applyForcesDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			vkCmdPushConstants(commandBuffers[currentFrame], addDyeShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DyeSplashPushConstants), &dspc);
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, addDyeShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, addDyeShader.pipelineLayout, 0, 1, &addDyeDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountDisplay.x, workgroupCountDisplay.y, 1);
 
 			VkMemoryBarrier forces_barrier;
 			forces_barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -1039,13 +1051,13 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			for (int i = 0; i < pressure_iter; i++) {
 				int pingpong = i % 2;
@@ -1062,7 +1074,7 @@ private:
 
 				vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipeline);
 				vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, pressureShader.pipelineLayout, 0, 1, &pressureDescriptorSets[2 * currentFrame + pingpong], 0, nullptr);
-				vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+				vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			}
 
@@ -1078,7 +1090,7 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyPressureShader.pipelineLayout, 0, 1, &applyPressureDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			VkMemoryBarrier barrier_advect;
 			barrier_advect.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -1093,7 +1105,7 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, advectionShader.pipelineLayout, 0, 1, &advectionDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (sim_width + 31) / 32, (sim_height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			VkMemoryBarrier barrier_dye;
 			barrier_dye.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
@@ -1108,7 +1120,7 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, dyeAdvectionShader.pipelineLayout, 0, 1, &dyeAdvectionDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountDisplay.x, workgroupCountDisplay.y, 1);
 		}
 		
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
@@ -1120,7 +1132,7 @@ private:
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipelineLayout, 0, 1, &displayDescriptorSets[currentFrame * swapChainImages.size() + imageIdx], 0, nullptr);
-		vkCmdDispatch(commandBuffers[currentFrame], (width + 31) / 32, (height + 31) / 32, 1);
+		vkCmdDispatch(commandBuffers[currentFrame], workgroupCountDisplay.x, workgroupCountDisplay.y, 1);
 
 		recordImageBarrier(commandBuffers[currentFrame], swapChainImages[imageIdx],
 			VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,

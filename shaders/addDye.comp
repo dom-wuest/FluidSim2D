@@ -22,7 +22,8 @@ layout (push_constant) uniform DyeSplashPushConstants
     vec4 color;
 } splash;
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout( local_size_x_id = 0) in;
+layout( local_size_y_id = 1) in;
 
 #define D_COORD(i,j) (i) + (j) * splash.width
 

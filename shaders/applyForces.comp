@@ -30,7 +30,8 @@ layout (push_constant) uniform SplashPushConstants
     vec4 dir;
 } splash;
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout( local_size_x_id = 0) in;
+layout( local_size_y_id = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * splash.sim_width
 #define U_COORD(i,j) (i) + (j) * (splash.sim_width + 1)
