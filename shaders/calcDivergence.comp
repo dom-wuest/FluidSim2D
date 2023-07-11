@@ -69,5 +69,5 @@ void main(){
     }
 
     float div = u_r - u_l + v_b - v_t;
-    divergence[S_COORD(gIDx, gIDy)] = div * 0.5;
+    divergence[S_COORD(gIDx, gIDy)] = div;
 }

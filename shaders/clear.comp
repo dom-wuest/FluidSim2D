@@ -1,7 +1,11 @@
 #version 450
 
-layout (binding = 0) buffer POut {
-    float pressure[ ];
+layout (binding = 0) buffer PIn {
+    float p_in[ ];
+};
+
+layout (binding = 1) buffer POut {
+    float p_out[ ];
 };
 
 layout (push_constant) uniform PushConstants
@@ -26,6 +30,5 @@ void main(){
     if(gIDx >= p.sim_width || gIDy >= p.sim_height){
         return;
     }
-    float press = pressure[S_COORD(gIDx, gIDy)];
-    pressure[S_COORD(gIDx, gIDy)] = press;
+    p_out[S_COORD(gIDx, gIDy)] = p_in[S_COORD(gIDx, gIDy)] * 0.99;
 }

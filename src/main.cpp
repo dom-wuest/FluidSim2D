@@ -109,7 +109,7 @@ public:
 		height = h;
 		sim_resolution = res;
 		pressure_iter = iter / 2;
-		pressure_iter = pressure_iter * 2 + 1;
+		pressure_iter = pressure_iter * 2;
 		shaderPath = shaderpath;
 		deltaTime = dt;
 
@@ -354,7 +354,10 @@ private:
 		
 		while (!glfwWindowShouldClose(window)) {
 			glfwPollEvents();
-			drawFrame();
+			if (!paused) {
+				drawFrame();
+			}
+			
 
 			double currentTime = glfwGetTime();
 			lastFrameTime = (currentTime - lastTime) * 1000.0;
@@ -1024,8 +1027,12 @@ private:
 		pc.height = height;
 		pc.sim_width = sim_width;
 		pc.sim_height = sim_height;
-		//pc.deltaTime = (float)lastFrameTime / 1000.0;
-		pc.deltaTime = deltaTime;
+		if (deltaTime <= 0) {
+			pc.deltaTime = (float)lastFrameTime / 1000.0;
+		}
+		else {
+			pc.deltaTime = deltaTime;
+		}
 
 		SplashPushConstants spc;
 		spc.sim_width = sim_width;
@@ -1051,6 +1058,12 @@ private:
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, applyForcesShader.pipelineLayout, 0, 1, &applyForcesDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
+			vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+
+			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
+			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
+			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
+
 			vkCmdPushConstants(commandBuffers[currentFrame], addDyeShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DyeSplashPushConstants), &dspc);
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, addDyeShader.pipeline);
@@ -1069,12 +1082,6 @@ private:
 
 			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipeline);
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
-			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
-
-			vkCmdPushConstants(commandBuffers[currentFrame], clearPressureShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
-
-			vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipeline);
-			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, clearPressureShader.pipelineLayout, 0, 1, &clearPressureDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
 			for (int i = 0; i < pressure_iter; i++) {
@@ -1246,7 +1253,7 @@ private:
 
 		std::vector<VkDescriptorSetLayoutBinding> layoutBindings;
 
-		for (int i = 0; i < 1; i++) {
+		for (int i = 0; i < 2; i++) {
 			Utils::addStorageBuffer(layoutBindings, i);
 		}
 
@@ -1293,7 +1300,7 @@ private:
 		poolSizes[0].descriptorCount = static_cast<uint32_t>(swapChainImages.size() * MAX_FRAMES_IN_FLIGHT);
 
 		// divergence: 4
-		// clear: 1
+		// clear: 2
 		// forces: 5
 		// add dye: 3
 		// projection: 4*2
@@ -1301,7 +1308,7 @@ private:
 		// advection: 5
 		// dye advection: 5
 		// display: 5*SWAP_CHAIN_SIZE
-		const size_t NUM_BUFFERS = 4 + 1 + 5 + 3 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
+		const size_t NUM_BUFFERS = 4 + 2 + 5 + 3 + (4 * 2) + 6 + 5 + 5 + (5 * swapChainImages.size());
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * NUM_BUFFERS);
 
@@ -1309,7 +1316,7 @@ private:
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = 2;
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (9 + swapChainImages.size()));
+		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * (10 + swapChainImages.size()));
 
 		if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
@@ -1433,12 +1440,12 @@ private:
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 
+			// pingpong
 			Utils::bindBuffer(device, solidBuffers[i], pressureDescriptorSets[2 * i], 0);
 			Utils::bindBuffer(device, divergenceBuffers[i], pressureDescriptorSets[2 * i], 1);
 			Utils::bindBuffer(device, pressureBuffers[i], pressureDescriptorSets[2 * i], 2);
 			Utils::bindBuffer(device, pressureBuffers[MAX_FRAMES_IN_FLIGHT + i], pressureDescriptorSets[2 * i], 3);
 
-			// pingpong
 			Utils::bindBuffer(device, solidBuffers[i], pressureDescriptorSets[2 * i + 1], 0);
 			Utils::bindBuffer(device, divergenceBuffers[i], pressureDescriptorSets[2 * i + 1], 1);
 			Utils::bindBuffer(device, pressureBuffers[MAX_FRAMES_IN_FLIGHT + i], pressureDescriptorSets[2 * i + 1], 2);
@@ -1460,7 +1467,10 @@ private:
 		}
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-			Utils::bindBuffer(device, pressureBuffers[i], clearPressureDescriptorSets[i], 0);
+			// i_old is index of previous frame
+			size_t i_old = (i - 1) % MAX_FRAMES_IN_FLIGHT;
+			Utils::bindBuffer(device, pressureBuffers[i_old], clearPressureDescriptorSets[i], 0);
+			Utils::bindBuffer(device, pressureBuffers[i], clearPressureDescriptorSets[i], 1);
 		}
 	}
 
@@ -1544,6 +1554,7 @@ private:
 	}
 
 	void drawFrame() {
+
 		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
 		uint32_t imageIndex;
@@ -1580,7 +1591,7 @@ private:
 
 		vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-		//vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
+		vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 		recordCommandBuffer(currentFrame, imageIndex);
 
 		if (vkQueueSubmit(computeQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
@@ -1839,11 +1850,11 @@ int main(int argc, char* argv[]) {
 
 	options.set_width(100).set_tab_expansion().add_options()
 		("s,scene", "Scene to simulate: [" + ss.str() + "]", cxxopts::value<std::string>()->default_value("Windtunnel"))
-		("i,iter", "Number of iterations for pressure projection", cxxopts::value<int>()->default_value("20"))
-		("w,width", "Width of output window", cxxopts::value<int>()->default_value("1000"))
-		("h,height", "Height of output window", cxxopts::value<int>()->default_value("600"))
+		("i,iter", "Number of iterations for pressure projection", cxxopts::value<int>()->default_value("40"))
+		("w,width", "Width of output window", cxxopts::value<int>()->default_value("1920"))
+		("h,height", "Height of output window", cxxopts::value<int>()->default_value("1000"))
 		("r,res", "Resolution of the simulation (vertical)", cxxopts::value<int>()->default_value("512"))
-		("t,dt", "Time per simulation step [s]", cxxopts::value<float>()->default_value("0.0003"))
+		("t,dt", "Time per simulation step [s]", cxxopts::value<float>()->default_value("0.001"))
 		("help", "Print usage");
 
 

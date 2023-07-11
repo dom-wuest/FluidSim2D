@@ -105,7 +105,7 @@ void main(){
     uint gIDx = gl_GlobalInvocationID.x;
     uint gIDy = gl_GlobalInvocationID.y;
 
-    if(gIDx >= p.width || gIDy >= p.height){
+    if(gIDx >= p.width || gIDy >= p.height || gIDx == 0 || gIDy == 0){
         return;
     }
 

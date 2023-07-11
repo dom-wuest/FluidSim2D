@@ -161,7 +161,7 @@ void main(){
     //float v_x = bilerp_v(x,y);
     //vec4 color = vec4(u_x,v_x,0.0,1.0);
 #ifdef SHOW_PRESSURE
-    float press = nearest_p(x, y) / 10.0 + 1.0;
+    float press = nearest_p(x, y) / 10.0;
     vec4 color = sciColor(press);
 #else
     float vel_u = bilerp_u(x, y);
