@@ -511,6 +511,9 @@ private:
 
 		createShaderStorageBuffers(sim_width, sim_resolution);
 
+		workgroupCountSim = (glm::ivec2(sim_width, sim_resolution) + workgroupSizeSim - glm::ivec2(1)) / workgroupSizeSim;
+		workgroupCountDisplay = (glm::ivec2(width, height) + workgroupSizeDisplay - glm::ivec2(1)) / workgroupSizeDisplay;
+
 		createDescriptorPool();
 		
 		createDisplayPipeline();
