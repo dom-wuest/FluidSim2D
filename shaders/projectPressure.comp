@@ -29,68 +29,69 @@ layout( local_size_x_id = 0) in;
 layout( local_size_y_id = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * p.sim_width
+#define NUM_ITER 1
+
+#define LOCAL_COORD(i,j) (i) + (j) * (gl_WorkGroupSize.x)
+#define LOCAL_OFFSET(buffID) (buffID) * gl_WorkGroupSize.x * gl_WorkGroupSize.y
+// one element per thread
+shared float[(gl_WorkGroupSize.x) * (gl_WorkGroupSize.y)] p_local;
+shared int[(gl_WorkGroupSize.x) * (gl_WorkGroupSize.y)] s_local;
 
 void main(){
 
+/*
     int gIDx = int(gl_GlobalInvocationID.x);
     int gIDy = int(gl_GlobalInvocationID.y);
 
     if(gIDx >= int(p.sim_width) || gIDy >= int(p.sim_height)){
         return;
     }
-/*
-    if(s[S_COORD(gIDx, gIDy)] == 0){
-        return;
-    }
-
-    int s_l = gIDx > 0 ? s[S_COORD(gIDx - 1, gIDy)] : 0;
-    int s_r = gIDx < (p.sim_width - 1) ? s[S_COORD(gIDx + 1, gIDy)] : 0;
-    int s_t = gIDy > 0 ? s[S_COORD(gIDx, gIDy - 1)] : 0;
-    int s_b = gIDy < (p.sim_height - 1) ? s[S_COORD(gIDx, gIDy + 1)] : 0;
-    int s_sum = s_l + s_r + s_t + s_b;
-
-    if(s_sum == 0) {
-        return;
-    }
-
-    float p_l = gIDx > 0 ? p_in[S_COORD(gIDx - 1, gIDy)] : 0.0;
-    float p_r = gIDx < (p.sim_width - 1) ? p_in[S_COORD(gIDx + 1, gIDy)] : 0.0;
-    float p_t = gIDy > 0 ? p_in[S_COORD(gIDx, gIDy - 1)] : 0.0;
-    float p_b = gIDy < (p.sim_height - 1) ? p_in[S_COORD(gIDx, gIDy + 1)] : 0.0;
-
-    float divergence = div[S_COORD(gIDx, gIDy)];
 */
-    int s_c = s[S_COORD(gIDx, gIDy)];
+    int gIDx = int(gl_GlobalInvocationID.x) - NUM_ITER * (1 + 2 * int(gl_WorkGroupID.x));
+    int gIDy = int(gl_GlobalInvocationID.y) - NUM_ITER * (1 + 2 * int(gl_WorkGroupID.y));
 
-    int id_l = max(0, gIDx-1);
-    int id_r = min(int(p.sim_width)-1, gIDx+1);
-    int id_t = max(0, gIDy-1);
-    int id_b = min(int(p.sim_height)-1, gIDy+1);
+    int lIDx = int(gl_LocalInvocationID.x);
+    int lIDy = int(gl_LocalInvocationID.y);
 
-    int s_l = s[S_COORD(id_l, gIDy)];
-    int s_r = s[S_COORD(id_r, gIDy)];
-    int s_t = s[S_COORD(gIDx, id_t)];
-    int s_b = s[S_COORD(gIDx, id_b)];
+    
+    if(gIDx < 0 || gIDx >= int(p.sim_width) || gIDy < 0 || gIDy >= int(p.sim_height)){
+        s_local[LOCAL_COORD(lIDx,lIDy)] = 0;
+        p_local[LOCAL_COORD(lIDx,lIDy)] = 0.0;
+        return;
+    }
 
-    float p_l = p_in[S_COORD(id_l, gIDy)];
-    float p_r = p_in[S_COORD(id_r, gIDy)];
-    float p_t = p_in[S_COORD(gIDx, id_t)];
-    float p_b = p_in[S_COORD(gIDx, id_b)];
+    s_local[LOCAL_COORD(lIDx,lIDy)] = s[S_COORD(gIDx, gIDy)];
+    p_local[LOCAL_COORD(lIDx,lIDy)] = p_in[S_COORD(gIDx, gIDy)];
+    barrier();
+
+    if(lIDx == 0 || lIDx == gl_WorkGroupSize.x-1 || lIDy == 0 || lIDy == gl_WorkGroupSize.y-1 || s_local[LOCAL_COORD(lIDx,lIDy)] == 0){
+        return;
+    }
 
     float divergence = div[S_COORD(gIDx, gIDy)];
+
+    int s_l = s_local[LOCAL_COORD(lIDx-1, lIDy)];
+    int s_r = s_local[LOCAL_COORD(lIDx+1, lIDy)];
+    int s_t = s_local[LOCAL_COORD(lIDx, lIDy-1)];
+    int s_b = s_local[LOCAL_COORD(lIDx, lIDy+1)];
+
+    float p_l = p_local[LOCAL_COORD(lIDx-1, lIDy)];
+    float p_r = p_local[LOCAL_COORD(lIDx+1, lIDy)];
+    float p_t = p_local[LOCAL_COORD(lIDx, lIDy-1)];
+    float p_b = p_local[LOCAL_COORD(lIDx, lIDy+1)];
 
     int has_l = min(gIDx, 1);
     int has_r = int(p.sim_width) - 1 - max(gIDx, int(p.sim_width)-2);
     int has_t = min(gIDy, 1);
     int has_b = int(p.sim_height) - 1 - max(gIDy, int(p.sim_height)-2);
 
-    if(s_c == 0) {
-        return;
-    }
-
     int s_sum = s_l * has_l + s_r * has_r + s_t * has_t + s_b * has_b;
+    
 
-    float pressure = (p_l * float(has_l) + p_r * float(has_r) + p_t * float(has_t) + p_b * float(has_b) - divergence) / float(s_sum);
+    float pressure = p_local[LOCAL_COORD(lIDx,lIDy)];
+    if (s_sum != 0){
+        pressure = (p_l * float(has_l) + p_r * float(has_r) + p_t * float(has_t) + p_b * float(has_b) - divergence) / float(s_sum);
+    }
     
     p_out[S_COORD(gIDx, gIDy)] = pressure;
 }

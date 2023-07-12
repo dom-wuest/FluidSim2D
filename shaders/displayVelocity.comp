@@ -68,7 +68,7 @@ float nearest_v(float x, float y){
     // x,y in [0.0,1.0)
     float x_l = floor(x * float(p.sim_width + 1));
     float y_l = floor(y * float(p.sim_height + 1));
-    return float(v[int(x_l) + (p.sim_width + 1) * int(y_l)]);
+    return float(v[int(x_l) + (p.sim_width) * int(y_l)]);
 }
 
 float bilerp_u(float x, float y){
@@ -120,7 +120,9 @@ vec4 sciColor(float val) {
     vec3 colorMap[] = vec3[](vec3(0.050,0.029,0.527), vec3(0.327,0.006,0.646), vec3(0.545,0.038,0.647), vec3(0.724,0.197,0.537), vec3(0.858,0.359,0.407), vec3(0.955,0.533,0.285), vec3(0.994,0.738,0.167), vec3(1.0,0.940,0.131));
 
     int idx = int(floor(val * 7.0));
+    idx = max(min(idx,6),0);
     float dx = val * 7.0 - float(idx);
+    dx = max(min(dx,1.0),0.0);
     vec4 A = vec4(colorMap[idx],1.0);
     vec4 B = vec4(colorMap[idx+1],1.0);
     return mix(A,B, dx);
@@ -161,19 +163,22 @@ void main(){
     //float v_x = bilerp_v(x,y);
     //vec4 color = vec4(u_x,v_x,0.0,1.0);
 #ifdef SHOW_PRESSURE
-    float press = nearest_p(x, y) / 10.0;
+    float press = nearest_p(x, y)+0.2;
+    //float press_neg = (max(min(0.0 - press,1.0),0.0));
+    //press = max(min(press,1.0),0.0);
     vec4 color = sciColor(press);
+    //vec4 color = vec4(press,0.0,press_neg,1.0);
 #else
-    float vel_u = bilerp_u(x, y);
-    float vel_v = bilerp_v(x, y) * 1.5;
+    float vel_u = nearest_u(x, y);
+    float vel_v = nearest_v(x, y);
     vec4 color = vec4(vel_u,vel_v,-vel_v,1.0);
 #endif
 
-    if(nearest_s(x,y) < 0.5){
+    //if(nearest_s(x,y) < 0.5){
         // solid -> white!
         //color = vec4(1.0,1.0,1.0,1.0);
-    }
-    //color = bilerp_dye(x,y);
+    //}
+    // color = bilerp_dye(x,y);
     //color.w = 1.0;
     color = dye[D_COORD(gIDx,gIDy)];
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
