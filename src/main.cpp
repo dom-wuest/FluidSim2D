@@ -99,12 +99,32 @@ struct DyeSplashPushConstants {
 	glm::vec4 color;
 };
 
+struct DisplayPushConstants {
+	unsigned int width;
+	unsigned int height;
+	unsigned int sim_width;
+	unsigned int sim_height;
+	unsigned int out_field;
+};
+
 
 
 class FluidSimApplication {
 public:
-	bool run(std::string shaderpath, std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter, float dt) {
+	bool run(std::string shaderpath, std::string scenename, unsigned int w, unsigned int h, unsigned int res, unsigned int iter, float dt, std::string outputname) {
 		scene = Scenes::SceneManager::instance().createScene(scenename);
+		if (outputname.compare("Dye") == 0) {
+			output = 0;
+		}
+		else if (outputname.compare("Pressure") == 0) {
+			output = 1;
+		}
+		else {
+			std::string msg = "Output " + outputname + " does not exist";
+			throw new std::exception(msg.c_str());
+			return false;
+		}
+
 		width = w;
 		height = h;
 		sim_resolution = res;
@@ -145,6 +165,10 @@ public:
 
 	void restart() {
 		framebufferResized = true;
+	}
+
+	void toggleOutput() {
+		output = (output + 1) % 2;
 	}
 
 private:
@@ -245,6 +269,8 @@ private:
 	glm::ivec2 workgroupCountSim;
 	glm::ivec2 workgroupCountDisplay;
 
+	uint32_t output = 0; // 0=Dye, 1=Pressure
+
 	void initWindow() {
 		glfwInit();
 
@@ -272,6 +298,9 @@ private:
 		}
 		if (key == GLFW_KEY_R && action == GLFW_PRESS) {
 			app->restart();
+		}
+		if (key == GLFW_KEY_O && action == GLFW_PRESS) {
+			app->toggleOutput();
 		}
 	}
 
@@ -757,7 +786,7 @@ private:
 	}
 
 	void createDisplayPipeline() {
-		Utils::createPipeline(device, shaderPath + "displayVelocity.comp", displayShader, sizeof(PushConstants), workgroupSizeDisplay);
+		Utils::createPipeline(device, shaderPath + "displayVelocity.comp", displayShader, sizeof(DisplayPushConstants), workgroupSizeDisplay);
 	}
 
 	void createAdvectionPipeline() {
@@ -1053,6 +1082,14 @@ private:
 		dspc.radius = spc.radius;
 		dspc.s_active = splashActive;
 
+		DisplayPushConstants dpc;
+		dpc.width = width;
+		dpc.height = height;
+		dpc.sim_width = sim_width;
+		dpc.sim_height = sim_height;
+		dpc.out_field = output;
+
+
 		if (!paused) {
 
 			vkCmdPushConstants(commandBuffers[currentFrame], applyForcesShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SplashPushConstants), &spc);
@@ -1160,7 +1197,7 @@ private:
 			VK_ACCESS_MEMORY_WRITE_BIT, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
-		vkCmdPushConstants(commandBuffers[currentFrame], displayShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(PushConstants), &pc);
+		vkCmdPushConstants(commandBuffers[currentFrame], displayShader.pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(DisplayPushConstants), &dpc);
 
 		vkCmdBindPipeline(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipeline);
 		vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, displayShader.pipelineLayout, 0, 1, &displayDescriptorSets[currentFrame * swapChainImages.size() + imageIdx], 0, nullptr);
@@ -1842,6 +1879,7 @@ int main(int argc, char* argv[]) {
 		"Controls: \n"
 		"  SPACEBAR:        pause / continue simulation \n"
 		"  R:               restart simulation \n"
+		"  O:               toggle output \n"
 		"  LEFT MOUSE BTN:  apply force and dye at cursor \n"
 		"--------------------------------------------------"
 	);
@@ -1862,6 +1900,7 @@ int main(int argc, char* argv[]) {
 		("h,height", "Height of output window", cxxopts::value<int>()->default_value("600"))
 		("r,res", "Resolution of the simulation (vertical)", cxxopts::value<int>()->default_value("512"))
 		("t,dt", "Time per simulation step [s]", cxxopts::value<float>()->default_value("0.001"))
+		("o,output", "Output to visualize: [Dye, Pressure]", cxxopts::value<std::string>()->default_value("Dye"))
 		("help", "Print usage");
 
 
@@ -1887,11 +1926,12 @@ int main(int argc, char* argv[]) {
 	int height = result["height"].as<int>();
 	int res = result["res"].as<int>();
 	float dt = result["dt"].as<float>();
+	std::string outputname = result["output"].as<std::string>();
 
 	FluidSimApplication app;
 
 	try {
-		app.run(path, scenename, width, height, res, iter, dt);
+		app.run(path, scenename, width, height, res, iter, dt, outputname);
 	}
 	catch (const std::exception& e) {
 		std::cerr << e.what() << std::endl;
