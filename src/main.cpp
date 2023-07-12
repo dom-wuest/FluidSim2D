@@ -159,7 +159,9 @@ public:
 	}
 
 	void updateMousePos(glm::vec2 pos) {
-		cursorVelocity = pos - lastCursorPos; // /last frame time?
+		const float EMA_WEIGHT = 0.1;
+		glm::vec2 newVel = pos - lastCursorPos;
+		cursorVelocity = EMA_WEIGHT * newVel + (1-EMA_WEIGHT) * cursorVelocity; // /last frame time?
 		lastCursorPos = pos;
 	}
 
@@ -1071,7 +1073,7 @@ private:
 		spc.sim_height = sim_height;
 		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
 		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / deltaTime), 0.0, 0.0);
-		spc.radius = 1.0;
+		spc.radius = 2.0;
 		spc.s_active = splashActive;
 
 		DyeSplashPushConstants dspc;
