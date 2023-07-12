@@ -367,7 +367,6 @@ private:
 			avgFrameTime += (double(lastFrameTime) - avgFrameTime) / numFrames;
 
 			if (numFrames % 1000 == 0) {
-
 				std::cout << "\33[2K\r";
 				std::cout << "Frametime AVG [ms]:       " << std::setprecision(3) << avgFrameTime;
 				numFrames = 0;
@@ -1085,9 +1084,11 @@ private:
 			vkCmdBindDescriptorSets(commandBuffers[currentFrame], VK_PIPELINE_BIND_POINT_COMPUTE, divergenceShader.pipelineLayout, 0, 1, &divergenceDescriptorSets[currentFrame], 0, nullptr);
 			vkCmdDispatch(commandBuffers[currentFrame], workgroupCountSim.x, workgroupCountSim.y, 1);
 
-			glm::ivec2 workgroupCountPressure = (glm::ivec2(sim_width, sim_height) + workgroupSizeSim - glm::ivec2(3)) / (workgroupSizeSim - glm::ivec2(2));
+			const size_t NUM_ITER_SHADER = 5;
 
-			for (int i = 0; i < pressure_iter; i++) {
+			glm::ivec2 workgroupCountPressure = (glm::ivec2(sim_width, sim_height) + workgroupSizeSim - glm::ivec2(1 + NUM_ITER_SHADER * 2)) / (workgroupSizeSim - glm::ivec2(NUM_ITER_SHADER * 2));
+
+			for (int i = 0; i < pressure_iter/ NUM_ITER_SHADER; i++) {
 				int pingpong = i % 2;
 				VkMemoryBarrier barrier;
 				barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
