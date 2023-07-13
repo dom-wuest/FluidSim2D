@@ -42,16 +42,18 @@ An interactive Vulkan-based fluid simulation in 2D
 Controls:
   SPACEBAR:        pause / continue simulation
   R:               restart simulation
+  O:               toggle output
   LEFT MOUSE BTN:  apply force and dye at cursor
 --------------------------------------------------
 Usage:
   FluidSimulation2D [OPTION...]
 
   -s, --scene arg   Scene to simulate: [Paint, Pressurebox, Windtunnel] (default: Windtunnel)
-  -i, --iter arg    Number of iterations for pressure projection (default: 8)
+  -i, --iter arg    Number of iterations for pressure projection (default: 20)
   -w, --width arg   Width of output window (default: 1000)
   -h, --height arg  Height of output window (default: 600)
   -r, --res arg     Resolution of the simulation (vertical) (default: 512)
-  -t, --dt arg      Time per simulation step [s] (default: 0.0003)
+  -t, --dt arg      Time per simulation step [s] (default: 0.001)
+  -o, --output arg  Output to visualize: [Dye, Pressure] (default: Dye)
       --help        Print usage
 ```
