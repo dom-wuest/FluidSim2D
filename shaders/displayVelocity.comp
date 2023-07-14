@@ -22,12 +22,13 @@ layout (binding = 5) readonly buffer DyeIn {
     vec4 dye[];
 };
 
-layout (push_constant) uniform PushConstants
+layout (push_constant) uniform DisplayPushConstants
 {
     uint width;
     uint height;
     uint sim_width;
     uint sim_height;
+    vec4 circel;
     uint out_field;
 } p;
 
@@ -36,7 +37,6 @@ layout( local_size_y_id = 1) in;
 
 #define S_COORD(i,j) (i) + (j) * p.sim_width
 #define D_COORD(i,j) (i) + (j) * p.width
-#define SHOW_PRESSURE
 
 float nearest_p(float x, float y){
     // x,y in [0.0,1.0)
@@ -44,11 +44,15 @@ float nearest_p(float x, float y){
     float y_l = floor(y * float(p.sim_height));
     return float(pressure[int(x_l) + p.sim_width * int(y_l)]);
 }
-float nearest_s(float x, float y){
-    // x,y in [0.0,1.0)
-    float x_l = floor(x * float(p.sim_width));
-    float y_l = floor(y * float(p.sim_height));
-    return float(solids[int(x_l) + p.sim_width * int(y_l)]);
+
+float is_fluid(float x, float y){
+    float dx = x * float(p.sim_width) - p.circel.x;
+    float dy = y * float(p.sim_height) - p.circel.y;
+    float fl = 1.0;
+    if (dx*dx + dy*dy < (p.circel.z * p.circel.z)){
+        fl = 0.0;
+    }
+    return fl;
 }
 
 vec4 sciColor(float val) {
@@ -87,5 +91,9 @@ void main(){
         color = sciColor(press);
     }
 
+    if(p.circel.w > 0 && is_fluid(x,y) < 0.5){
+        color = vec4(0.0, 0.0, 0.0,1.0);
+    }
+    
     imageStore( resultImage, ivec2(gl_GlobalInvocationID.xy), color);
 }

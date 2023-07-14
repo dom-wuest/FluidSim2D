@@ -39,14 +39,6 @@ shared int[(gl_WorkGroupSize.x) * (gl_WorkGroupSize.y)] s_local;
 
 void main(){
 
-/*
-    int gIDx = int(gl_GlobalInvocationID.x);
-    int gIDy = int(gl_GlobalInvocationID.y);
-
-    if(gIDx >= int(p.sim_width) || gIDy >= int(p.sim_height)){
-        return;
-    }
-*/
     int gIDx = int(gl_GlobalInvocationID.x) - NUM_ITER * (1 + 2 * int(gl_WorkGroupID.x));
     int gIDy = int(gl_GlobalInvocationID.y) - NUM_ITER * (1 + 2 * int(gl_WorkGroupID.y));
 

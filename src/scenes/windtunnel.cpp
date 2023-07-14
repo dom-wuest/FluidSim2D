@@ -46,3 +46,10 @@ glm::vec4 WindTunnelSceneBuilder::dyeColor(uint32_t frameIdx)
 {
 	return glm::vec4(0.4,0.0,0.0,1.0);
 }
+
+unsigned int WindTunnelSceneBuilder::circels(glm::vec2& pos, float& radius)
+{
+	pos = glm::vec2(0.25 * sim_height, 0.5 * sim_height);
+	radius = sim_height / 7.0;
+	return 1;
+}

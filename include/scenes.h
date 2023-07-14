@@ -24,6 +24,7 @@ namespace Scenes {
 		virtual bool fillSimulationBuffers(std::vector<int>& solids, std::vector<float>& u, std::vector<float>& v) = 0;
 		virtual bool fillDisplayBuffers(std::vector<glm::vec4>& dye) = 0;
 		virtual glm::vec4 dyeColor(uint32_t frameIdx) = 0;
+		virtual unsigned int circels(glm::vec2& pos, float& radius) { return 0; }
 	};
 
 	typedef std::function<SceneBuilder* ()> AbstractBuilder;

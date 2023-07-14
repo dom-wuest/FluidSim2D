@@ -104,6 +104,7 @@ struct DisplayPushConstants {
 	unsigned int height;
 	unsigned int sim_width;
 	unsigned int sim_height;
+	glm::vec4 circel;
 	unsigned int out_field;
 };
 
@@ -1073,7 +1074,7 @@ private:
 		spc.sim_height = sim_height;
 		spc.pos = glm::vec4(lastCursorPos * glm::vec2(1.0/float(width), 1.0/float(height)),0.0,0.0);
 		spc.dir = glm::vec4(cursorVelocity * glm::vec2(1.0 / float(width), 1.0 / float(height)) * glm::vec2(0.5 / deltaTime), 0.0, 0.0);
-		spc.radius = 2.0;
+		spc.radius = 10.0;
 		spc.s_active = splashActive;
 
 		DyeSplashPushConstants dspc;
@@ -1090,7 +1091,12 @@ private:
 		dpc.sim_width = sim_width;
 		dpc.sim_height = sim_height;
 		dpc.out_field = output;
-
+		glm::vec2 circelPos;
+		float circelRadius;
+		dpc.circel = glm::vec4(0.0);
+		if (scene->circels(circelPos, circelRadius) > 0) {
+			dpc.circel = glm::vec4(circelPos.x, circelPos.y, circelRadius, 1.0);
+		}
 
 		if (!paused) {
 
