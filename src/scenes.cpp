@@ -10,7 +10,7 @@ std::unique_ptr<Scenes::SceneBuilder> Scenes::SceneManager::createScene(std::str
 {
     if (scenes.count(name) <= 0) {
         std::string msg = "Scene '" + name + "' does not exist";
-        throw std::exception(msg.c_str());
+        throw new std::runtime_error(msg.c_str());
     }
     auto scene = scenes.at(name)();
     std::unique_ptr<SceneBuilder> ptr;
@@ -21,7 +21,7 @@ std::unique_ptr<Scenes::SceneBuilder> Scenes::SceneManager::createScene(std::str
 std::vector<std::string> Scenes::SceneManager::availableScenes()
 {
     std::vector<std::string> names;
-    for each (auto entry in scenes)
+    for (auto entry : scenes)
     {
         names.push_back(entry.first);
     }

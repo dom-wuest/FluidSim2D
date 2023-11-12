@@ -122,7 +122,7 @@ public:
 		}
 		else {
 			std::string msg = "Output " + outputname + " does not exist";
-			throw new std::exception(msg.c_str());
+			throw new std::runtime_error(msg.c_str());
 			return false;
 		}
 
@@ -642,12 +642,23 @@ private:
 		std::vector<VkPhysicalDevice> devices(deviceCount);
 		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
+		// select the first suitable device
 		for (const auto& device : devices) {
 			if (isDeviceSuitable(device)) {
 				physicalDevice = device;
+				
 				break;
 			}
 		}
+
+		// print the available devices and selected device
+		std::cout << std::endl << "Available devices: (-> is used)" << std::endl << "------------------" << std::endl;
+		for (const auto& device : devices) {
+			VkPhysicalDeviceProperties props;
+			vkGetPhysicalDeviceProperties(device, &props);
+			std::cout << ((device == physicalDevice) ? "-> " : "   ") << props.deviceName << std::endl;
+		}
+		std::cout << std::endl;
 
 		if (physicalDevice == VK_NULL_HANDLE) {
 			throw std::runtime_error("failed to find a suitable GPU!");
@@ -1879,7 +1890,12 @@ int main(int argc, char* argv[]) {
 	// Get the path
 	std::string path = aux.substr(0, pos + 1);
 	path = replace(path, "\\", "/");
+	
+#if defined(_WIN32) || defined(WIN32)
 	path = path + "../shaders/";
+#else
+	path = path + "shaders/";
+#endif
 
 	cxxopts::Options options("FluidSimulation2D", 
 		"An interactive Vulkan-based fluid simulation in 2D \n"

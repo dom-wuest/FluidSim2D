@@ -2,6 +2,7 @@
 
 #include <string>
 #include <functional>
+#include <stdexcept>
 #include <map>
 #include <vector>
 #include <memory>
