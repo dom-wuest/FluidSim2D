@@ -1,12 +1,43 @@
+<p float="left">
+  <img src="./images/windtunnel-pressure.png" width="32.5%" />
+  <img src="./images/windtunnel.png" width="33%" />
+  <img src="./images/pressurebox.png" width="33%" />
+</p>
+
 # 2D Fluid Simulation on the GPU
 
+## About this project
+This project is focused on implementing and optimizing a fluid simulation using Vulkan compute shaders. A grid-based approach has been taken as this maps to GPU memory efficiently and allows for optimizations later on.
+The simulation domain is limited to 2D as this simplifies visualization. In this project, compute and present queues are created, and the simulation steps are synchronized to be executed in the correct order. A simulation step is split into advection, pressure projection and visualization. These steps are implemented in different compute shaders which require synchronization as well. A naive implementation of these shaders was used for reference when optimizing performance. For this, a detailed performance analysis was performed using Nvidia Nsight Graphics. Besides optimizing shader dispatches in general by supporting multiple frames in flight, the pressure projection shader was optimized specifically with memory throughput in mind. The performance analysis showed that this shader dominated the duration of a simulation step. The shader itself is memory-bound as it propagates pressure values through the grid iteratively. Here we see a lot of potential for optimization and implemented different techniques such as ghost zoning, kernel decomposition and loop unrolling to increase performance. For technical details and the results of our performance analysis, refer to the [technical report](#technical-report).
+
+## Key features and optimizations
+
+Feature | Status
+--------|-------
+fluid advection | ✔️
+resolve fluid incompressibility | ✔️
+scenes with different boundary conditions | ✔️
+mouse interaction | ✔️
+cli | ✔️
+pressure visualization | ✔️
+windows support | ✔️
+linux support | ✔️
+
+The performance of a naive implementation is far from optimal. To compute more simulation steps per second, the performance was analyzed using Nvidia Nsight Graphics, and the most significant bottlenecks were identified. 
+Overall the simulation is memory-bound as most shader dispatches require data from neighbouring grid cells as well. Multiple optimization techniques have been used to increase GPU utilization and throughput.
+
+Optimization | Status | Details
+-------------|--------|----------
+reduce required memory bandwidth | ✔️ | optimized pressure projection step as it dominates the simulation time
+support multiple frames in flight | ✔️ | don't wait for simulation step to finish, start next step asap
+decouple simulation resolution | ✔️ | support different resolutions for simulation grid and output buffer
 
 
 ## Requirements
 
 - Install [Vulkan SDK](https://vulkan.lunarg.com)
 - Install [cmake](https://cmake.org) 3.16 or later
-- Install [Visual Studio](https://visualstudio.microsoft.com) 2019 or later
+- Install [Visual Studio](https://visualstudio.microsoft.com) 2019 or later (windows) or [GCC](https://gcc.gnu.org) (linux)
 
 ## Compiling
 
@@ -65,11 +96,11 @@ By default the colored dye is displayed (left), but the underlying pressure can 
 
 ## Technical report
 
-An important goal of this project is to learn the skills necessary to write high-performance GPU code. To achive this the simulation is implemented using the Vulkan. The naive implementation was analyzed thouroughly using [Nvidia Nsigh Graphics](https://developer.nvidia.com/nsight-graphics). Slow shaders and bottlenecks whithin the shaders were identified and the main performance limiters were optimized to improve overall performance:
+An important goal of this project is to learn the skills necessary to write high-performance GPU code. To achieve this the simulation is implemented using the Vulkan. The naive implementation was analyzed thoroughly using [Nvidia Nsigh Graphics](https://developer.nvidia.com/nsight-graphics). Slow shaders and bottlenecks within the shaders were identified and the main performance limiters were optimized to improve overall performance:
 
 ![Analysis using Nsigh Graphics](./images/nsight-optimized.png)
 
-For details about the implementation and optimization of the simulation take a look at the [technical report](./docs/TechnicalReport.pdf) or the [slides](./docs/PresentationSlides.pdf). These contain information about the underlying physics of fluids and a description of the simulation steps that were implemented. In the technical report there is a section about performance analysis and optimization on the GPU. For this project dependent texture reads (DTRs) were removed, the workgroup size was optimized and ghost zoning was implemented to make use of shared memory (left). The improvements were analyzed and compared to the naive implementation (right).
+For details about the implementation and optimization of the simulation take a look at the [technical report](./docs/TechnicalReport.pdf) or the [slides](./docs/PresentationSlides.pdf). These contain information about the underlying physics of fluids and a description of the simulation steps that were implemented. In the technical report, there is a section about performance analysis and optimization on the GPU. For this project dependent texture reads (DTRs) were removed, the workgroup size was optimized and ghost zoning was implemented to make use of shared memory (left). The improvements were analyzed and compared to the naive implementation (right).
 
 ![ghost zoning and performance gain](./images/optimization.png)
 
